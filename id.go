@@ -5,10 +5,13 @@ import (
 	"github.com/rs/xid"
 )
 
-func NewUniqueId(prefix *string) string {
-	p := ""
-	if prefix != nil {
-		p = *prefix
-	}
-	return fmt.Sprintf("%s%s", p, xid.New().String())
+// Create a new UniqueId with a prefix
+func NewUniqueIdP(prefix string) string {
+	return fmt.Sprintf("%s%s", prefix, xid.New().String())
 }
+
+// Create a new UniqueId
+func NewUniqueId() string {
+	return NewUniqueIdP("")
+}
+
