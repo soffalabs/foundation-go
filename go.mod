@@ -11,6 +11,7 @@ require (
 	github.com/rs/xid v1.3.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/streadway/amqp v1.0.0
+	github.com/tidwall/gjson v1.8.1 // indirect
 	github.com/wagslane/go-rabbitmq v0.6.2
 	github.com/xo/dburl v0.8.4
 	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect

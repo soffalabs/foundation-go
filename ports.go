@@ -2,10 +2,14 @@ package soffa
 
 import log "github.com/sirupsen/logrus"
 
-const FakeMessagePublisherUrl = "@faker"
+const FakeAmqpurl = "@faker"
 
 type MessagePublisher interface {
 	Send(channel string, message Message) error
+}
+
+type MessageHandler interface {
+	HandleMessage(message Message) bool
 }
 
 type EntityManager interface {

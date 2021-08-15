@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"github.com/tidwall/gjson"
 	"github.com/wagslane/go-rabbitmq"
 )
 
@@ -29,7 +30,7 @@ func (r RabbitMQPublisher) Send(channel string, message Message) error {
 }
 
 func CreateMessagePublisher(url string) MessagePublisher {
-	if url == FakeMessagePublisherUrl {
+	if url == FakeAmqpurl {
 		log.Info("Using FakeMessagePublisherImpl")
 		return FakeMessagePublisherImpl{}
 	}
@@ -43,37 +44,42 @@ func CreateMessagePublisher(url string) MessagePublisher {
 	}
 }
 
-/*
+func CreateMessageListener(url string, channel string, handler MessageHandler) {
 
-//goland:noinspection ALL
-func setupRabbitMQ() {
-	consumer, err := rabbitmq.NewConsumer(os.Getenv("AMQP_URL"), amqp.Config{})
-	if err != nil {
-		if core.DevMode {
-			log.Warn("Unable to connect to RabbitMQ, using internal messaging")
-			return
-		} else {
-			log.Fatal(err)
-		}
+	if url == FakeAmqpurl {
+		log.Info("Skipping message listener...")
+		return
 	}
+
+	consumer, err := rabbitmq.NewConsumer(url, amqp.Config{})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	err = consumer.StartConsuming(
 		func(d rabbitmq.Delivery) bool {
 			payload := string(d.Body)
 			event := gjson.Get(payload, "event")
 			if event.Exists() {
-				log.Debugf("New event received: [%s]", event.String())
-				payload := gjson.Get(payload, "payload")
-				return handleMessage(event.String(), payload.Raw)
+				var message Message
+				if err := json.Unmarshal(d.Body, &message); err != nil {
+					log.Warnf("Invalid payload received (decoding failed)")
+					return true
+				}
+				return handler.HandleMessage(message)
 			} else {
 				log.Warnf("Invalid payload received (missing  event)")
 				return true
 			}
 		},
-		core.AppName,
+		channel,
 		[]string{"default"},
 		rabbitmq.WithConsumeOptionsConcurrency(10),
 		rabbitmq.WithConsumeOptionsQueueDurable,
 		rabbitmq.WithConsumeOptionsQuorum,
+		rabbitmq.WithConsumeOptionsBindingExchangeName(channel),
+		rabbitmq.WithConsumeOptionsBindingExchangeKind("topic"),
+		rabbitmq.WithConsumeOptionsBindingExchangeDurable,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -82,5 +88,3 @@ func setupRabbitMQ() {
 	}
 
 }
-
-*/
