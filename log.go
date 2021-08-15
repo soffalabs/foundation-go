@@ -2,9 +2,27 @@ package soffa
 
 import (
 	"github.com/Masterminds/goutils"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 	"os"
 )
+
+func InitApp(appName string) {
+	if err := godotenv.Load(); err != nil {
+		log.Warn(err)
+	}
+	InitLogging()
+
+	env := os.Getenv("ENV")
+	AppName = appName
+	DevMode = env != "prod"
+	if !DevMode {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	log.Infof("ENV = %s", env)
+	log.Infof("DevMode = %v", DevMode)
+}
 
 func InitLogging() {
 	log.SetOutput(os.Stdout)
