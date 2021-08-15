@@ -1,2 +1,3 @@
-# commons-go
-Go utilities
+# soffa-core-go
+
+WIP
