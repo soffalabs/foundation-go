@@ -48,15 +48,17 @@ func CreateMessagePublisher(url string, fallbackToFakePublisher bool) MessagePub
 	}
 }
 
-func CreateBroadcastMessageListener(url string, channel string, handler MessageHandler) {
-	createTopicMessageListener(url, channel, "fanout", handler)
+func CreateBroadcastMessageListener(url string, channel string, fallbackToFakePublisher bool, handler MessageHandler) {
+	createTopicMessageListener(url, channel, "fanout", fallbackToFakePublisher, handler)
 }
 
-func CreateTopicMessageListener(url string, channel string, handler MessageHandler) {
-	createTopicMessageListener(url, channel, "topic", handler)
+func CreateTopicMessageListener(url string, channel string, fallbackToFakePublisher bool, handler MessageHandler) {
+	createTopicMessageListener(url, channel, "topic", fallbackToFakePublisher, handler)
 }
 
-func createTopicMessageListener(url string, channel string, king string, handler MessageHandler) {
+func createTopicMessageListener(url string, channel string, king string, fallbackToFakePublisher bool, handler MessageHandler) {
+
+	log.Infof("Creating messageListener: %s", url)
 
 	if url == FakeAmqpurl {
 		log.Info("Skipping message listener...")
@@ -65,6 +67,10 @@ func createTopicMessageListener(url string, channel string, king string, handler
 
 	consumer, err := rabbitmq.NewConsumer(url, amqp.Config{})
 	if err != nil {
+		if fallbackToFakePublisher {
+			log.Info("Skipping message listener...")
+			return
+		}
 		log.Fatal(err)
 	}
 
