@@ -1,6 +1,5 @@
 package soffa
 
-
 type FunctionalError struct {
 	error
 	Code    string `json:"code"`
@@ -20,9 +19,29 @@ func NewFunctionalError(message string, code string) error {
 	}
 }
 
+func NewFunctionalError0(message string) error {
+	return FunctionalError{
+		Code:    "FERR",
+		Message: message,
+	}
+}
+
 func NewTechnicalError(message string, code string) error {
 	return FunctionalError{
 		Code:    code,
 		Message: message,
+	}
+}
+
+func NewTechnicalError0(message string) error {
+	return FunctionalError{
+		Code:    "TERR",
+		Message: message,
+	}
+}
+
+func ThrowAny(err error) {
+	if err != nil {
+		panic(err)
 	}
 }

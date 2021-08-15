@@ -29,13 +29,17 @@ func (r RabbitMQPublisher) Send(channel string, message Message) error {
 	)
 }
 
-func CreateMessagePublisher(url string) MessagePublisher {
+func CreateMessagePublisher(url string, fallbackToFakePublisher bool) MessagePublisher {
 	if url == FakeAmqpurl {
 		log.Info("Using FakeMessagePublisherImpl")
 		return FakeMessagePublisherImpl{}
 	}
 	publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
 	if err != nil {
+		if fallbackToFakePublisher {
+			log.Info("Using FakeMessagePublisherImpl")
+			return FakeMessagePublisherImpl{}
+		}
 		log.Fatal(err)
 	}
 	log.Info("Connected to RabbitMQ: %s", url)
@@ -44,7 +48,15 @@ func CreateMessagePublisher(url string) MessagePublisher {
 	}
 }
 
-func CreateMessageListener(url string, channel string, handler MessageHandler) {
+func CreateBroadcastMessageListener(url string, channel string, handler MessageHandler) {
+	createTopicMessageListener(url, channel, "fanout", handler)
+}
+
+func CreateTopicMessageListener(url string, channel string, handler MessageHandler) {
+	createTopicMessageListener(url, channel, "topic", handler)
+}
+
+func createTopicMessageListener(url string, channel string, king string, handler MessageHandler) {
 
 	if url == FakeAmqpurl {
 		log.Info("Skipping message listener...")
@@ -73,12 +85,12 @@ func CreateMessageListener(url string, channel string, handler MessageHandler) {
 			}
 		},
 		channel,
-		[]string{"default"},
+		[]string{"default", ""},
 		rabbitmq.WithConsumeOptionsConcurrency(10),
 		rabbitmq.WithConsumeOptionsQueueDurable,
 		rabbitmq.WithConsumeOptionsQuorum,
 		rabbitmq.WithConsumeOptionsBindingExchangeName(channel),
-		rabbitmq.WithConsumeOptionsBindingExchangeKind("topic"),
+		rabbitmq.WithConsumeOptionsBindingExchangeKind(king),
 		rabbitmq.WithConsumeOptionsBindingExchangeDurable,
 	)
 	if err != nil {

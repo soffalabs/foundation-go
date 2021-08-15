@@ -1,6 +1,8 @@
 package soffa
 
-import log "github.com/sirupsen/logrus"
+import (
+	log "github.com/sirupsen/logrus"
+)
 
 const FakeAmqpurl = "@faker"
 
@@ -18,6 +20,10 @@ type EntityManager interface {
 	FindAll(dest interface{}, limit int) error
 	FindBy(dest interface{}, where string, args ...interface{}) error
 	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)
+	First(model interface{}) error
+	CreateSchema(name string) error
+	Count(model interface{}) (int64, error)
+	GetBy(dest interface{}, query string, args ...interface{}) error
 }
 
 type FakeMessagePublisherImpl struct {

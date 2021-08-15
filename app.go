@@ -6,6 +6,18 @@ import (
 )
 
 func Start(router *gin.Engine) {
-	port := GetEnv("PORT", "8080")
+	port := Getenv("PORT", "8080", true)
 	_ = router.Run(fmt.Sprintf(":%s", port))
+}
+
+type Promise struct {
+	Error  error
+	Result interface{}
+}
+
+func (p Promise) Then(next func() Promise) Promise {
+	if p.Error != nil {
+		return p
+	}
+	return next()
 }

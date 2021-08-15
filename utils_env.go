@@ -2,9 +2,9 @@ package soffa
 
 import "os"
 
-func GetEnv(key string, fallback string) string {
+func Getenv(key string, fallback string, fallbackIf bool) string {
 	value := os.Getenv(key)
-	if IsStrEmpty(value) {
+	if IsStrEmpty(value) && fallbackIf {
 		return fallback
 	}
 	return value

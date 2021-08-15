@@ -34,11 +34,13 @@ func CreateEntityManager(databaseUrl string, migrations []*gormigrate.Migration)
 		panic("failed to connect database")
 	}
 
-	m := gormigrate.New(link, gormigrate.DefaultOptions, migrations)
-	if err := m.Migrate(); err != nil{
-		log.Fatalf("Could not migrate: %v", err)
-	}else {
-		log.Printf("Migration did run successfully")
+	if migrations != nil {
+		m := gormigrate.New(link, gormigrate.DefaultOptions, migrations)
+		if err := m.Migrate(); err != nil {
+			log.Fatalf("Could not migrate: %v", err)
+		} else {
+			log.Printf("Migration did run successfully")
+		}
 	}
 
 	return GormEntityManager{Link: link}
