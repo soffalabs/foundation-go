@@ -76,15 +76,23 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 
 	err = consumer.StartConsuming(
 		func(d rabbitmq.Delivery) bool {
-			payload := string(d.Body)
-			event := gjson.Get(payload, "event")
+			body := string(d.Body)
+			if log.IsLevelEnabled(log.DebugLevel) {
+				log.Debug("------- [amqp message received] -------")
+				log.Debug(body)
+				log.Debug("---------------------------------------")
+			}
+			event := gjson.Get(body, "event")
+			payload := gjson.Get(body, "payload")
 			if event.Exists() {
-				var message Message
-				if err := json.Unmarshal(d.Body, &message); err != nil {
-					log.Warnf("Invalid payload received (decoding failed)")
-					return true
+				var message = Message {
+					Event: event.String(),
+					Payload: payload.String(),
 				}
-				return handler.HandleMessage(message)
+				if err := handler.HandleMessage(message); err != nil {
+					return false
+				}
+				return true
 			} else {
 				log.Warnf("Invalid payload received (missing  event)")
 				return true

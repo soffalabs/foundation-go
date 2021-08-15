@@ -11,7 +11,7 @@ type MessagePublisher interface {
 }
 
 type MessageHandler interface {
-	HandleMessage(message Message) bool
+	HandleMessage(event Message) error
 }
 
 type EntityManager interface {
