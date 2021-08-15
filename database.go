@@ -7,17 +7,18 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"os"
 )
 
-func CreateEntityManager(migrations []*gormigrate.Migration) EntityManager {
-	dbUrl := os.Getenv("DATABASE_URL")
-	if len(dbUrl) == 0 {
-		log.Fatal("missing DATABASE_URL")
+func CreateEntityManager(databaseUrl string, migrations []*gormigrate.Migration) EntityManager {
+
+	if IsStrEmpty(databaseUrl) {
+		log.Fatal("invalid databaseUr provided")
+		return nil
 	}
-	cnx, err := dburl.Parse(dbUrl)
+	cnx, err := dburl.Parse(databaseUrl)
 	if err != nil {
-		log.Fatalf("error parinsg database url: %v", err)
+		log.Fatalf("Error parsing databaseUrl: %v", err)
+		return nil
 	}
 
 	var dialect gorm.Dialector
