@@ -29,16 +29,15 @@ func (r RabbitMQPublisher) Send(channel string, message Message) error {
 }
 
 func CreateMessagePublisher(url string) MessagePublisher {
-
 	if url == FakeMessagePublisherUrl {
 		log.Info("Using FakeMessagePublisherImpl")
 		return FakeMessagePublisherImpl{}
 	}
-
 	publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Info("Connected to RabbitMQ: %s", url)
 	return RabbitMQPublisher{
 		publisher: publisher,
 	}
