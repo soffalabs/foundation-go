@@ -3,7 +3,9 @@ package soffa
 import (
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go"
 	"github.com/streadway/amqp"
+	"github.com/tidwall/gjson"
 	"github.com/wagslane/go-rabbitmq"
 )
 
@@ -21,7 +23,7 @@ func (r RabbitMQPublisher) Send(channel string, message Message) error {
 	return r.publisher.Publish(
 		data,
 		[]string{"default"},
-		rabbitmq.WithPublishOptionsContentType("application/json"),
+		rabbitmq.WithPublishOptionsContentType("text/plain"),
 		rabbitmq.WithPublishOptionsMandatory,
 		rabbitmq.WithPublishOptionsPersistentDelivery,
 		rabbitmq.WithPublishOptionsExchange(channel),
@@ -81,16 +83,25 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 				log.Debug(body)
 				log.Debug("---------------------------------------")
 			}
-			message := Message{}
 
-			if err = json.Unmarshal(d.Body, &message); err != nil {
-				log.Error("Invalid RabbitMQ payload received\n%v", body)
-				return true
+			event := gjson.Get(body, "event")
+			payload := gjson.Get(body, "payload")
+
+			if event.Exists() && payload.Exists() {
+				var payloaMap soffa.H
+				if err = json.Unmarshal(d.Body, &payloaMap); err != nil {
+					log.Error("Invalid RabbitMQ payload received\n%v", body)
+					return true
+				}
+				message := Message{
+					Event: event.String(),
+					Payload: payloaMap,
+				}
+				if err = handler.HandleMessage(message); err != nil {
+					return false
+				}
 			}
-			
-			if err = handler.HandleMessage(message); err != nil {
-				return false
-			}
+
 			return true
 		},
 		channel,
