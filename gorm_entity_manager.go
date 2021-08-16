@@ -52,9 +52,9 @@ func (em GormEntityManager) CreateSchema(name string) error {
 	return nil
 }
 
-func (em GormEntityManager) Transactional(callback func() error) error {
+func (em GormEntityManager) Transactional(callback func(em EntityManager) error) error {
 	return em.Link.Transaction(func(tx *gorm.DB) error {
-		return callback()
+		return callback(GormEntityManager{Link: tx})
 	})
 }
 

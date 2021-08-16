@@ -16,7 +16,7 @@ type MessageHandler interface {
 
 type EntityManager interface {
 	Create(model interface{}) error
-	Transactional(callback func() error) error
+	Transactional(callback func(em EntityManager) error) error
 	FindAll(dest interface{}, limit int) error
 	FindBy(dest interface{}, where string, args ...interface{}) error
 	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)

@@ -5,8 +5,8 @@ type HealthCheck struct {
 }
 
 type Message struct {
-	Event string `json:"event"`
-	Payload string `json:"payload"`
+	Event   string      `json:"event"`
+	Payload interface{} `json:"payload"`
 }
 
 // H is a shortcut for map[string]interface{}
