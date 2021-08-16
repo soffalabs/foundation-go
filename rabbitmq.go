@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
-	"github.com/tidwall/gjson"
 	"github.com/wagslane/go-rabbitmq"
 )
 
@@ -82,21 +81,17 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 				log.Debug(body)
 				log.Debug("---------------------------------------")
 			}
-			event := gjson.Get(body, "event")
-			payload := gjson.Get(body, "payload")
-			if event.Exists() {
-				var message = Message {
-					Event: event.String(),
-					Payload: payload.String(),
-				}
-				if err := handler.HandleMessage(message); err != nil {
-					return false
-				}
-				return true
-			} else {
-				log.Warnf("Invalid payload received (missing  event)")
+			message := Message{}
+
+			if err = json.Unmarshal(d.Body, &message); err != nil {
+				log.Error("Invalid RabbitMQ payload received\n%v", body)
 				return true
 			}
+			
+			if err = handler.HandleMessage(message); err != nil {
+				return false
+			}
+			return true
 		},
 		channel,
 		[]string{"default", ""},
