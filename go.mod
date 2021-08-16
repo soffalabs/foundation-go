@@ -8,10 +8,11 @@ require (
 	github.com/go-gormigrate/gormigrate/v2 v2.0.0
 	github.com/joho/godotenv v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect
+	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/rs/xid v1.3.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/streadway/amqp v1.0.0
-	github.com/tidwall/gjson v1.8.1 // indirect
+	github.com/tidwall/gjson v1.8.1
 	github.com/wagslane/go-rabbitmq v0.6.2
 	github.com/xo/dburl v0.8.4
 	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect
