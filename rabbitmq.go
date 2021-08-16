@@ -3,7 +3,6 @@ package soffa
 import (
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
-	"github.com/soffa-io/soffa-core-go"
 	"github.com/streadway/amqp"
 	"github.com/tidwall/gjson"
 	"github.com/wagslane/go-rabbitmq"
@@ -88,7 +87,7 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 			payload := gjson.Get(body, "payload")
 
 			if event.Exists() && payload.Exists() {
-				var payloaMap soffa.H
+				var payloaMap H
 				if err = json.Unmarshal(d.Body, &payloaMap); err != nil {
 					log.Error("Invalid RabbitMQ payload received\n%v", body)
 					return true
