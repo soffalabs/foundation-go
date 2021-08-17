@@ -5,6 +5,7 @@ import (
 	"github.com/caarlos0/env"
 	"github.com/gin-gonic/gin"
 	"github.com/go-gormigrate/gormigrate/v2"
+	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
@@ -54,6 +55,12 @@ func NewApp(env string, configSource string, config interface{}) *App {
 		ConfigSource: configSource,
 		Config:       config,
 		Context:      H{},
+	}
+	filenames := []string{fmt.Sprintf(".env.%s", env), ".env"}
+	for _, f := range filenames {
+		if err := godotenv.Load(f); err != nil {
+			log.Warn(err)
+		}
 	}
 	app.Init()
 	return app

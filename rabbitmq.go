@@ -14,7 +14,7 @@ type RabbitMQPublisher struct {
 }
 
 func (r RabbitMQPublisher) Send(channel string, message Message) error {
-	log.Debug("[rabbitmq] sending message to %s", channel)
+	log.Debugf("[rabbitmq] sending message to %s", channel)
 	data, err := EncodeMessage(message)
 	if err != nil {
 		return err
@@ -34,6 +34,10 @@ func CreateMessagePublisher(url string, fallbackToFakePublisher bool) MessagePub
 		log.Info("Using FakeMessagePublisherImpl")
 		return FakeMessagePublisherImpl{}
 	}
+	if IsStrEmpty(url) {
+		log.Fatalf("An empty amqurl was provided.")
+	}
+	log.Debugf("Connecting to RabbitMQ @ %s", url)
 	publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
 	if err != nil {
 		if fallbackToFakePublisher {

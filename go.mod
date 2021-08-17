@@ -3,7 +3,6 @@ module github.com/soffa-io/soffa-core-go
 go 1.16
 
 require (
-	github.com/Masterminds/goutils v1.1.1
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/gin-gonic/gin v1.7.3
 	github.com/go-gormigrate/gormigrate/v2 v2.0.0

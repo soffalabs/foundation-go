@@ -4,7 +4,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const FakeAmqpurl = "@faker"
+const FakeAmqpurl = "@mocked"
 
 type MessagePublisher interface {
 	Send(channel string, message Message) error
