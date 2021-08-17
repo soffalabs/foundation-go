@@ -10,9 +10,7 @@ type MessagePublisher interface {
 	Send(channel string, message Message) error
 }
 
-type MessageHandler interface {
-	HandleMessage(event Message) error
-}
+type MessageHandler = func(event Message) error
 
 type EntityManager interface {
 	Create(model interface{}) error

@@ -5,6 +5,7 @@ type HealthCheck struct {
 }
 
 type Message struct {
+	Context interface{}
 	Event   string      `json:"event"`
 	Payload interface{} `json:"payload"`
 }

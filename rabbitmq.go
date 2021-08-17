@@ -114,7 +114,7 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 			if err != nil {
 				return true
 			}
-			if err = handler.HandleMessage(*message); err != nil {
+			if err = handler(*message); err != nil {
 				return false
 			}
 			return true

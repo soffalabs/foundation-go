@@ -37,7 +37,7 @@ type Request struct {
 }
 
 type Validations struct {
-	gin     *gin.Context
+	gin *gin.Context
 }
 
 type Response struct {
@@ -45,9 +45,7 @@ type Response struct {
 	Context interface{}
 }
 
-
 type HandlerFunc func(req Request, res Response)
-
 
 func NewApp(env string, configSource string, config interface{}) *App {
 	app := &App{
@@ -100,7 +98,17 @@ func (app *App) CreateMessagePublisher(url string) MessagePublisher {
 }
 
 func (app *App) RegisterBroadcastListener(amqpurl string, channel string, handler MessageHandler) {
-	CreateBroadcastMessageListener(amqpurl, channel, app.IsDevMode(), handler)
+	CreateBroadcastMessageListener(amqpurl, channel, app.IsDevMode(), func(event Message) error {
+		event.Context = app.Context
+		return handler(event)
+	})
+}
+
+func (app *App) CreateMessageListener(amqpurl string, channel string, handler MessageHandler) {
+	CreateTopicMessageListener(amqpurl, channel, app.IsDevMode(), func(event Message) error {
+		event.Context = app.Context
+		return handler(event)
+	})
 }
 
 func (app *App) CreateDatasource(name string, url string, migrations []*gormigrate.Migration) EntityManager {
@@ -116,7 +124,6 @@ func (app *App) ApplyMigrations() {
 		}
 	}
 }
-
 
 func (app *App) NewRouter() AppRouter {
 	r := gin.Default()
@@ -159,6 +166,14 @@ func (r Response) OK(body interface{}) {
 	r.gin.JSON(http.StatusOK, body)
 }
 
+func (r Response) JSON(status int, body interface{}) {
+	r.gin.JSON(status, body)
+}
+
+func (r Response) BadRequest(body interface{}) {
+	r.gin.JSON(http.StatusBadRequest, body)
+}
+
 func (r Response) Send(res interface{}, err error) {
 	if err != nil {
 		switch t := err.(type) {
@@ -199,7 +214,7 @@ func (r Request) BindJson(dest interface{}) bool {
 }
 
 func (r Request) Validations() Validations {
-	return Validations {gin: r.gin}
+	return Validations{gin: r.gin}
 }
 
 func (r Request) CheckInputWithRegex(value string, pattern string, errorCode string) bool {
