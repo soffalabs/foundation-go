@@ -1,7 +1,13 @@
 package soffa
 
-import "github.com/mitchellh/mapstructure"
+import (
+	"encoding/json"
+)
 
 func Convert(input interface{}, dest interface{}) error {
-	return mapstructure.Decode(input, &dest)
+	bytes, err := json.Marshal(input)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(bytes, &dest)
 }

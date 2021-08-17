@@ -2,9 +2,9 @@ package soffa
 
 import (
 	"encoding/json"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
-	"github.com/tidwall/gjson"
 	"github.com/wagslane/go-rabbitmq"
 )
 
@@ -15,7 +15,7 @@ type RabbitMQPublisher struct {
 
 func (r RabbitMQPublisher) Send(channel string, message Message) error {
 	log.Debug("[rabbitmq] sending message to %s", channel)
-	data, err := json.Marshal(message)
+	data, err := EncodeMessage(message)
 	if err != nil {
 		return err
 	}
@@ -56,6 +56,36 @@ func CreateTopicMessageListener(url string, channel string, fallbackToFakePublis
 	createTopicMessageListener(url, channel, "topic", fallbackToFakePublisher, handler)
 }
 
+func EncodeMessage(message interface{}) ([]byte, error) {
+	data, err := json.Marshal(message)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+func DecodeMessage(body []byte) (*Message, error) {
+	sbody := string(body)
+	if log.IsLevelEnabled(log.DebugLevel) {
+		log.Debug("------- [amqp message received] -------")
+		log.Debug(sbody)
+		log.Debug("---------------------------------------")
+	}
+
+	var message *Message
+	if err := json.Unmarshal(body, &message); err != nil {
+		log.Error("Invalid RabbitMQ payload received\n%v", body)
+		return nil, err
+	}
+
+	if IsStrEmpty(message.Event) {
+		return nil, fmt.Errorf("Invalid message payload received. No event provided\n%v", body)
+	}
+
+	return message, nil
+
+}
+
 func createTopicMessageListener(url string, channel string, king string, fallbackToFakePublisher bool, handler MessageHandler) {
 
 	log.Infof("Creating messageListener: %s", url)
@@ -76,31 +106,13 @@ func createTopicMessageListener(url string, channel string, king string, fallbac
 
 	err = consumer.StartConsuming(
 		func(d rabbitmq.Delivery) bool {
-			body := string(d.Body)
-			if log.IsLevelEnabled(log.DebugLevel) {
-				log.Debug("------- [amqp message received] -------")
-				log.Debug(body)
-				log.Debug("---------------------------------------")
+			message, err := DecodeMessage(d.Body)
+			if err != nil {
+				return true
 			}
-
-			event := gjson.Get(body, "event")
-			payload := gjson.Get(body, "payload")
-
-			if event.Exists() && payload.Exists() {
-				var payloaMap H
-				if err = json.Unmarshal(d.Body, &payloaMap); err != nil {
-					log.Error("Invalid RabbitMQ payload received\n%v", body)
-					return true
-				}
-				message := Message{
-					Event: event.String(),
-					Payload: payloaMap,
-				}
-				if err = handler.HandleMessage(message); err != nil {
-					return false
-				}
+			if err = handler.HandleMessage(*message); err != nil {
+				return false
 			}
-
 			return true
 		},
 		channel,
