@@ -1,6 +1,6 @@
 package soffa
 
-var (
-	DevMode bool
-	AppName string
-)
+type Credentials struct {
+	Username string
+	Password string
+}

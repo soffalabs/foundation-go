@@ -24,6 +24,7 @@ type EntityManager interface {
 	CreateSchema(name string) error
 	Count(model interface{}) (int64, error)
 	GetBy(dest interface{}, query string, args ...interface{}) error
+	ApplyMigrations() error
 }
 
 type FakeMessagePublisherImpl struct {

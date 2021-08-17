@@ -2,13 +2,16 @@ package soffa
 
 import (
 	"fmt"
+	"github.com/go-gormigrate/gormigrate/v2"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 type GormEntityManager struct {
 	EntityManager
-	Link *gorm.DB
+	Name       string
+	Link       *gorm.DB
+	migrations []*gormigrate.Migration
 }
 
 func (em GormEntityManager) Create(model interface{}) error {
@@ -72,4 +75,18 @@ func (em GormEntityManager) ExistsBy(model interface{}, where string, args ...in
 		return false, h.Error
 	}
 	return count > 0, nil
+}
+
+func (em GormEntityManager) ApplyMigrations() error {
+	if em.migrations != nil {
+		m := gormigrate.New(em.Link, gormigrate.DefaultOptions, em.migrations)
+		if err := m.Migrate(); err != nil {
+			return fmt.Errorf("[%s] could not be migrated -- %v", em.Name, err)
+		} else {
+			log.Printf("[%s] migrations applied successfully", em.Name)
+		}
+	} else {
+		log.Infof("[%s] no migrationss found to apply", em.Name)
+	}
+	return nil
 }

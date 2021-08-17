@@ -9,10 +9,22 @@ import (
 	"gorm.io/gorm"
 )
 
-func CreateEntityManager(databaseUrl string, migrations []*gormigrate.Migration) EntityManager {
+
+type Migration struct {
+	Author string
+	Id string
+	Changes []Change
+}
+//*gormigrate.Migration
+
+type Change struct {}
+
+
+
+func CreateEntityManager(name string, databaseUrl string, migrations []*gormigrate.Migration) EntityManager {
 
 	if IsStrEmpty(databaseUrl) {
-		log.Fatal("invalid databaseUr provided")
+		log.Fatal("invalid databaseUrl provided (empty)")
 		return nil
 	}
 	cnx, err := dburl.Parse(databaseUrl)
@@ -34,14 +46,5 @@ func CreateEntityManager(databaseUrl string, migrations []*gormigrate.Migration)
 		panic("failed to connect database")
 	}
 
-	if migrations != nil {
-		m := gormigrate.New(link, gormigrate.DefaultOptions, migrations)
-		if err := m.Migrate(); err != nil {
-			log.Fatalf("Could not migrate: %v", err)
-		} else {
-			log.Printf("Migration did run successfully")
-		}
-	}
-
-	return GormEntityManager{Link: link}
+	return GormEntityManager{Name: name, Link: link, migrations: migrations}
 }
