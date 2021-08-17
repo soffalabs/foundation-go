@@ -46,7 +46,7 @@ func CreateMessagePublisher(url string, fallbackToFakePublisher bool) MessagePub
 		}
 		log.Fatal(err)
 	}
-	log.Info("Connected to RabbitMQ: %s", url)
+	log.Infof("Connected to RabbitMQ: %s", url)
 	return RabbitMQPublisher{
 		publisher: publisher,
 	}
