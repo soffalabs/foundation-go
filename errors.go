@@ -12,6 +12,12 @@ type TechnicalError struct {
 	Message string `json:"message"`
 }
 
+type UnauthorizedError struct {
+	error
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 func NewFunctionalError(message string, code string) error {
 	return FunctionalError{
 		Code:    code,
@@ -22,6 +28,12 @@ func NewFunctionalError(message string, code string) error {
 func NewFunctionalError0(message string) error {
 	return FunctionalError{
 		Code:    "FERR",
+		Message: message,
+	}
+}
+func NewUnauthorizedError(message string) error {
+	return UnauthorizedError{
+		Code:    "Unauthorized",
 		Message: message,
 	}
 }

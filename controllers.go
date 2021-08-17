@@ -21,6 +21,11 @@ func GinHandle(c *gin.Context, operation func() (interface{}, error)) {
 				"code":    t.Code,
 				"message": t.Message,
 			})
+		case UnauthorizedError:
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"code":    t.Code,
+				"message": t.Message,
+			})
 		case FunctionalError:
 			c.JSON(http.StatusBadRequest, gin.H{
 				"code":    t.Code,
