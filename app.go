@@ -56,9 +56,7 @@ func NewApp(env string, configSource string, config interface{}) *App {
 	}
 	filenames := []string{fmt.Sprintf(".env.%s", env), ".env"}
 	for _, f := range filenames {
-		if err := godotenv.Load(f); err != nil {
-			log.Warn(err)
-		}
+		_ = godotenv.Load(f)
 	}
 	app.Init()
 	return app
