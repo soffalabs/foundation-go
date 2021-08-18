@@ -232,12 +232,12 @@ func (r Request) GetKongConsumer() *KongConsumerInfo {
 	if IsStrEmpty(id) {
 		return nil
 	}
-	return &KongConsumerInfo {
-		Id:       id,
-		CustomId: r.gin.GetHeader("X-Consumer-Custom-ID"),
-		Username: r.gin.GetHeader("X-Consumer-Username"),
+	return &KongConsumerInfo{
+		Id:                   id,
+		CustomId:             r.gin.GetHeader("X-Consumer-Custom-ID"),
+		Username:             r.gin.GetHeader("X-Consumer-Username"),
 		CredentialIdentifier: r.gin.GetHeader("X-Credential-Identifier"),
-		Anonymous: r.gin.GetHeader("X-Anonymous-Consumer") == "true",
+		Anonymous:            r.gin.GetHeader("X-Anonymous-Consumer") == "true",
 	}
 }
 
@@ -286,7 +286,9 @@ func (r Request) RequireBasicAuth() (Credentials, bool) {
 func securityFilter(gc *gin.Context) {
 	h := gc.GetHeader("X-Anonymous-Consumer")
 	if "true" == strings.ToLower(h) {
-		gc.AbortWithStatus(403)
+		gc.AbortWithStatusJSON(403, H{
+			"message": "Anonymous access to this resource is forbidden",
+		})
 	}
 }
 
