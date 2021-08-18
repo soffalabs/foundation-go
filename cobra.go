@@ -41,7 +41,7 @@ func createServerCmd(initializer AppCreator) *cobra.Command {
 			app.Start(port)
 		},
 	}
-	cmd.Flags().StringVarP(&env, "env", "e", Getenv(os.Getenv("ENV"), "dev", true), "active environment profile")
+	cmd.Flags().StringVarP(&env, "env", "e", os.Getenv("ENV"), "active environment profile")
 	cmd.Flags().StringVarP(&configSource, "config", "c", os.Getenv("CONFIG_SOURCE"), "config source")
 	cmd.Flags().IntVarP(&port, "port", "p", Getenvi("PORT", 8080), "server port")
 	cmd.Flags().BoolVarP(&dbMigrations, "db-migrations", "m", Getenvb("DB_MIGRATIONS", true), "apply database migrations")
