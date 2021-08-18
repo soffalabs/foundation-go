@@ -45,6 +45,10 @@ type Response struct {
 	Context interface{}
 }
 
+type RouterConfig struct {
+	Secure bool
+}
+
 type HandlerFunc func(req Request, res Response)
 
 func NewApp(env string, configSource string, config interface{}) *App {
@@ -134,8 +138,8 @@ func (app *App) NewRouter() AppRouter {
 		Context: app.Context,
 	}
 
-	app.router.GET("/status", healthechkHandler)
-	app.router.GET("/healthz", healthechkHandler)
+	app.router.GET("/status", nil, healthechkHandler)
+	app.router.GET("/healthz", nil, healthechkHandler)
 
 	return app.router
 }
@@ -148,15 +152,32 @@ func (app App) NewTestServer() *httptest.Server {
 	return httptest.NewServer(app.router.engine)
 }
 
-func (router AppRouter) POST(path string, handler HandlerFunc) AppRouter {
-	router.engine.POST(path, func(gc *gin.Context) {
-		handler(Request{gin: gc, Context: router.Context}, Response{gin: gc, Context: router.Context})
-	})
-	return router
+func (router AppRouter) POST(path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	return router.route("POST", path, config, handler)
 }
 
-func (router AppRouter) GET(path string, handler HandlerFunc) AppRouter {
-	router.engine.GET(path, func(gc *gin.Context) {
+func (router AppRouter) DELETE(path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	return router.route("DELETE", path, config, handler)
+}
+
+func (router AppRouter) PUT(path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	return router.route("PUT", path, config, handler)
+}
+
+func (router AppRouter) PATCH(path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	return router.route("PATCH", path, config, handler)
+}
+
+func (router AppRouter) GET(path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	return router.route("GET", path, config, handler)
+}
+
+func (router AppRouter) route(httpMethod string, path string, config *RouterConfig, handler HandlerFunc) AppRouter {
+	group := router.engine.Group(path)
+	if config != nil && config.Secure {
+		group.Use(securityFilter)
+	}
+	group.Handle(httpMethod, "", func(gc *gin.Context) {
 		handler(Request{gin: gc, Context: router.Context}, Response{gin: gc, Context: router.Context})
 	})
 	return router
@@ -202,6 +223,24 @@ func (r Response) Send(res interface{}, err error) {
 	}
 }
 
+func (r Request) Header(name string) string {
+	return r.gin.GetHeader(name)
+}
+
+func (r Request) GetKongConsumer() *KongConsumerInfo {
+	id := r.gin.GetHeader("X-Consumer-ID")
+	if IsStrEmpty(id) {
+		return nil
+	}
+	return &KongConsumerInfo {
+		Id:       id,
+		CustomId: r.gin.GetHeader("X-Consumer-Custom-ID"),
+		Username: r.gin.GetHeader("X-Consumer-Username"),
+		CredentialIdentifier: r.gin.GetHeader("X-Credential-Identifier"),
+		Anonymous: r.gin.GetHeader("X-Anonymous-Consumer") == "true",
+	}
+}
+
 func (r Request) BindJson(dest interface{}) bool {
 	if err := r.gin.ShouldBindJSON(dest); err != nil {
 		r.gin.JSON(http.StatusBadRequest, gin.H{
@@ -242,6 +281,13 @@ func (r Request) RequireBasicAuth() (Credentials, bool) {
 		return Credentials{}, false
 	}
 	return Credentials{Username: user, Password: password}, true
+}
+
+func securityFilter(gc *gin.Context) {
+	h := gc.GetHeader("X-Anonymous-Consumer")
+	if "true" == strings.ToLower(h) {
+		gc.AbortWithStatus(403)
+	}
 }
 
 func healthechkHandler(_ Request, res Response) {
