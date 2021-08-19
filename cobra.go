@@ -1,11 +1,17 @@
 package soffa
 
+/*
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"os"
 )
+*/
 
+func Run(builder func() Application) {
+}
+
+/*
 func CreateAppCli(name string, description string, initializer AppCreator) {
 	cobra.OnInitialize()
 
@@ -19,6 +25,7 @@ func CreateAppCli(name string, description string, initializer AppCreator) {
 	
 	_ = rootCmd.Execute()
 }
+
 
 type AppCreator = func(env string, configSource string, router bool) *App
 
@@ -67,3 +74,4 @@ func createDbCommand(initializer AppCreator) *cobra.Command {
 	return cmd
 }
 
+*/

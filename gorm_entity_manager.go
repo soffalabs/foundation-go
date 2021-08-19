@@ -21,11 +21,22 @@ func (em GormEntityManager) Create(model interface{}) error {
 	return nil
 }
 
-func (em GormEntityManager) GetBy(dest interface{}, query string, args ...interface{}) error {
-	if result := em.Link.Where(query, args...).First(dest); result.Error != nil {
+func (em GormEntityManager) Save(model interface{}) error {
+	if result := em.Link.Save(model); result.Error != nil {
 		return result.Error
 	}
 	return nil
+}
+
+func (em GormEntityManager) QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error) {
+	result := em.Link.Limit(1).Where(query, args...).Find(dest);
+	if result.Error != nil {
+		return false, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (em GormEntityManager) First(model interface{}) error {
@@ -78,15 +89,17 @@ func (em GormEntityManager) ExistsBy(model interface{}, where string, args ...in
 }
 
 func (em GormEntityManager) ApplyMigrations() error {
-	if em.migrations != nil {
+
+	if em.migrations == nil {
+		log.Infof("[%s] no migrationss found to apply", em.Name)
+		return nil
+	}
+
 		m := gormigrate.New(em.Link, gormigrate.DefaultOptions, em.migrations)
 		if err := m.Migrate(); err != nil {
 			return fmt.Errorf("[%s] could not be migrated -- %v", em.Name, err)
 		} else {
 			log.Printf("[%s] migrations applied successfully", em.Name)
+			return nil
 		}
-	} else {
-		log.Infof("[%s] no migrationss found to apply", em.Name)
-	}
-	return nil
 }

@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 )
 
+func ToBytesSafe(input interface{}) []byte {
+	return []byte(ToJsonStrSafe(input))
+}
+
 func ToJsonStr(input interface{}) (string, error) {
 	data, err := json.Marshal(input)
 	if err != nil {

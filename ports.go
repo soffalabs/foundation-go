@@ -14,14 +14,17 @@ type MessageHandler = func(event Message) error
 
 type EntityManager interface {
 	Create(model interface{}) error
+	Save(model interface{}) error
 	Transactional(callback func(em EntityManager) error) error
 	FindAll(dest interface{}, limit int) error
 	FindBy(dest interface{}, where string, args ...interface{}) error
 	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)
 	First(model interface{}) error
+	Query(dest interface{}, query string, args ...interface{}) error
 	CreateSchema(name string) error
 	Count(model interface{}) (int64, error)
-	GetBy(dest interface{}, query string, args ...interface{}) error
+	QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error)
+	FirstByModel(dest interface{}) error
 	ApplyMigrations() error
 }
 

@@ -57,3 +57,11 @@ func ThrowAny(err error) {
 		panic(err)
 	}
 }
+
+
+func AnyError(err1 error, err2 error) error {
+	if err1 == nil {
+		return err2
+	}
+	return err2
+}
