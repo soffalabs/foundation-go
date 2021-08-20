@@ -8,3 +8,11 @@ func AnyStr(candidates ...string) string {
 	}
 	return ""
 }
+
+
+func A(err error, fn func() error) error {
+	if err != nil {
+		return err
+	}
+	return fn()
+}

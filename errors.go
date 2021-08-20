@@ -1,6 +1,15 @@
 package sf
 
-import log "github.com/sirupsen/logrus"
+import (
+	"fmt"
+	log "github.com/sirupsen/logrus"
+)
+
+type GenericError struct {
+	Kind    string `json:"string"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
 
 type FunctionalError struct {
 	error
@@ -18,6 +27,38 @@ type UnauthorizedError struct {
 	error
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+func Capture(operation string, err error) error {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovering from panic:", r)
+		}
+	}()
+	if err != nil {
+
+		message := GenericError{}
+		switch t := err.(type) {
+		case TechnicalError:
+			message.Kind = "Technical"
+			message.Code = t.Code
+			message.Message = t.Message
+		case UnauthorizedError:
+			message.Kind = "Unauthorized"
+			message.Code = t.Code
+			message.Message = t.Message
+		case FunctionalError:
+			message.Kind = "Functional"
+			message.Code = t.Code
+			message.Message = t.Message
+		default:
+			message.Kind = "Default"
+			message.Message = err.Error()
+		}
+
+		log.Errorf("[[ capture ]]: %s | %s", operation, ToJsonStrSafe(message))
+	}
+	return err
 }
 
 func NewFunctionalError(message string, code string) error {
@@ -59,7 +100,6 @@ func ThrowAny(err error) {
 		panic(err)
 	}
 }
-
 
 func AnyError(err1 error, err2 error) error {
 	if err1 == nil {

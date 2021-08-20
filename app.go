@@ -98,9 +98,6 @@ func (r Response) BadRequest(body interface{}) {
 
 func (r Response) Send(res interface{}, err error) {
 	if err != nil {
-
-		log.Error(err)
-
 		switch t := err.(type) {
 		default:
 			r.gin.JSON(http.StatusInternalServerError, gin.H{
@@ -122,6 +119,7 @@ func (r Response) Send(res interface{}, err error) {
 				"message": t.Message,
 			})
 		}
+		log.Error(err)
 	} else {
 		r.OK(res)
 	}
@@ -147,7 +145,7 @@ func getKongConsumer(ctx *gin.Context) *KongConsumerInfo {
 
 func (r Request) BindJson(dest interface{}) bool {
 	if err := r.gin.ShouldBind(dest); err != nil {
-		log.Debugf("Validation error -- %v", err.Error())
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), err)
 		r.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -159,7 +157,7 @@ func (r Request) BindJson(dest interface{}) bool {
 
 func (r Request) BindUri(dest interface{}) bool {
 	if err := r.gin.ShouldBindUri(dest); err != nil {
-		log.Debugf("Validation error -- %v", err.Error())
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), err)
 		r.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -180,6 +178,7 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 		if err != nil {
 			message = err.Error()
 		}
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), fmt.Errorf(message))
 		r.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":    errorCode,
 			"message": message,
@@ -192,6 +191,7 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 func (r Request) RequireBasicAuth() (Credentials, bool) {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
 	if !hasAuth || IsStrEmpty(user) {
+		_ = Capture("http.request.unauthorized", fmt.Errorf(r.gin.Request.RequestURI))
 		r.gin.JSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
 		})
@@ -207,22 +207,28 @@ func (r Request) Param(name string) string {
 func (r Request) RequireParam(name string) string {
 	value := r.gin.Param(name)
 	if IsStrEmpty(value) {
+
+		message := fmt.Sprintf("Parameter '%s' is missing", name)
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), fmt.Errorf(message))
+
 		r.gin.AbortWithStatusJSON(http.StatusBadRequest, H{
-			"message": fmt.Sprintf("Parameter '%s' is missing", name),
+			"message": message,
 		})
 	}
 	return value
 }
 
-func (r Request) GetArg(key string) interface{}{
+func (r Request) GetArg(key string) interface{} {
 	return r.Context.Application.GetArg(key)
 }
 
 func securityFilter(gc *gin.Context) {
 	h := gc.GetHeader("X-Anonymous-Consumer")
 	if "true" == strings.ToLower(h) {
+		message := "anonymous access to this resource is forbidden"
+		_ = Capture(fmt.Sprintf("http.guest.access.forbidden:%s", gc.Request.RequestURI), fmt.Errorf(message))
 		gc.AbortWithStatusJSON(403, H{
-			"message": "Anonymous access to this resource is forbidden",
+			"message": message,
 		})
 	}
 }
@@ -272,7 +278,7 @@ func (app *Application) InitWithSource(env string, source string) {
 
 	app.globals = map[string]interface{}{}
 
-	if err := app.factory(app); err != nil {
+	if err := Capture("app.bootstrap", app.factory(app)); err != nil {
 		log.Fatal(err)
 	}
 
@@ -310,6 +316,7 @@ func (app *Application) createRouter() {
 		return
 	}
 	r := gin.Default()
+
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 
 	app.router = &AppRouter{
@@ -375,7 +382,7 @@ func (app *Application) ApplyDatabaseMigrations() error {
 		return nil
 	}
 
-	return app.DbManager.migrate()
+	return Capture("database.migration", app.DbManager.migrate())
 }
 
 func (app Application) Execute() {
@@ -444,12 +451,6 @@ func (app *Application) Start(port int) {
 	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
 }
 
-func (app Application) RegisterMessageHandler(amqpurl string, channel string, handler func(app Application, message Message) error) {
-	CreateTopicMessageListener(amqpurl, channel, app.IsTestEnv(), func(event Message) error {
-		return handler(app, event)
-	})
-}
-
 func init() {
 	initLogging()
 }
@@ -469,20 +470,3 @@ func (rc RequestContext) WithDbLink(id string, cb DbLinkCallback) error {
 func (rc RequestContext) WithTenantDbLink(cb DbLinkCallback) error {
 	return rc.WithDbLink(rc.TenantId, cb)
 }
-
-
-/*
-
-
-func (app *App) RegisterBroadcastListener(amqpurl string, channel string, handler MessageHandler) {
-	CreateBroadcastMessageListener(amqpurl, channel, app.IsProd(), func(event Message) error {
-		event.Context = app.Context
-		return handler(event)
-	})
-}
-
-func (app *App) CreateMessageListener(amqpurl string, channel string, handler MessageHandler) {
-
-}
-
-*/

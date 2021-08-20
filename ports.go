@@ -8,7 +8,8 @@ import (
 const FakeAmqpurl = "mocked"
 
 type MessagePublisher interface {
-	Send(channel string, message Message) error
+	Send(channel string, event string, payload interface{}) error
+	SendSelf(event string, payload interface{}) error
 }
 
 type MessageHandler = func(event Message) error

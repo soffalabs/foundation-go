@@ -3,6 +3,7 @@ module github.com/soffa-io/soffa-core-go
 go 1.16
 
 require (
+	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/gin-gonic/gin v1.7.3
 	github.com/go-gormigrate/gormigrate/v2 v2.0.0
@@ -12,6 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect
 	github.com/rs/xid v1.3.0
 	github.com/sirupsen/logrus v1.8.1
+	github.com/spf13/cobra v0.0.3
 	github.com/streadway/amqp v1.0.0
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
 	github.com/swaggo/gin-swagger v1.3.1
