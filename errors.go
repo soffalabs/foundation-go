@@ -1,4 +1,6 @@
-package soffa
+package sf
+
+import log "github.com/sirupsen/logrus"
 
 type FunctionalError struct {
 	error
@@ -64,4 +66,10 @@ func AnyError(err1 error, err2 error) error {
 		return err2
 	}
 	return err2
+}
+
+func Fatal(err error) {
+	if err != nil {
+		log.Fatal(err)
+	}
 }

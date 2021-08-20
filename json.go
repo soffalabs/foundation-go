@@ -1,4 +1,4 @@
-package soffa
+package sf
 
 import "github.com/tidwall/gjson"
 
@@ -22,13 +22,3 @@ func (j JsonValue) GetBool(path string, defaultValue bool) bool {
 	}
 	return r.Bool()
 }
-
-/*
-func (j JsonValue) Read(path string) *JsonValue {
-	r := gjson.Get(j.value, path)
-	if !r.Exists() {
-		return &JsonValue{}
-	}
-	return &JsonValue{result: &r}
-}
- */

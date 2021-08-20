@@ -1,4 +1,4 @@
-package soffa
+package sf
 
 type HTTPError struct {
 	Status  string `json:"status"`

@@ -1,4 +1,4 @@
-package soffa
+package sf
 
 import "os"
 import "strconv"

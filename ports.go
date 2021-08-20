@@ -1,10 +1,11 @@
-package soffa
+package sf
 
 import (
+	"github.com/go-gormigrate/gormigrate/v2"
 	log "github.com/sirupsen/logrus"
 )
 
-const FakeAmqpurl = "@mocked"
+const FakeAmqpurl = "mocked"
 
 type MessagePublisher interface {
 	Send(channel string, message Message) error
@@ -12,20 +13,22 @@ type MessagePublisher interface {
 
 type MessageHandler = func(event Message) error
 
-type EntityManager interface {
+
+type DbLink interface {
 	Create(model interface{}) error
 	Save(model interface{}) error
-	Transactional(callback func(em EntityManager) error) error
+	Exec(raw string) error
+	Transactional(callback func(link DbLink) error) error
 	FindAll(dest interface{}, limit int) error
-	FindBy(dest interface{}, where string, args ...interface{}) error
 	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)
 	First(model interface{}) error
 	Query(dest interface{}, query string, args ...interface{}) error
+	Pluck(table string, column string, dest interface{}) error
 	CreateSchema(name string) error
 	Count(model interface{}) (int64, error)
 	QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error)
-	FirstByModel(dest interface{}) error
-	ApplyMigrations() error
+	ApplyMigrations(migrations []*gormigrate.Migration, schema *string) error
+	UseSchema(name string) error
 }
 
 type FakeMessagePublisherImpl struct {

@@ -1,4 +1,4 @@
-package soffa
+package sf
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
 	"net/http"
@@ -19,21 +20,29 @@ type Application struct {
 	Name        string
 	Description string
 	Version     string
-
-	Datasource   *DatasourceManager
-	Routes       []Route
-	Env          string
-	ConfigSource string
-	Cli          bool
-	Config       interface{}
-	Context      interface{}
-
-	router      *AppRouter
-	initialized bool
+	Routes      []Route
+	DbManager   *DbManager
+	// @private
+	env          string
+	configSource string
+	router       *AppRouter
+	initialized  bool
+	factory      func(app *Application) error
+	globals      map[string]interface{}
 }
 
-func (app Application) IsDevMode() bool {
-	return app.Env != "prod"
+func CreateApp(name string, version, desc string, factory func(app *Application) error) *Application {
+	app := &Application{Name: name, Version: version, Description: desc, env: os.Getenv("ENV")}
+	app.factory = factory
+	return app
+}
+
+func (app Application) IsProd() bool {
+	return app.env == "prod"
+}
+
+func (app Application) IsTestEnv() bool {
+	return app.env == "test"
 }
 
 type AppRouter struct {
@@ -148,6 +157,18 @@ func (r Request) BindJson(dest interface{}) bool {
 	return true
 }
 
+func (r Request) BindUri(dest interface{}) bool {
+	if err := r.gin.ShouldBindUri(dest); err != nil {
+		log.Debugf("Validation error -- %v", err.Error())
+		r.gin.JSON(http.StatusBadRequest, gin.H{
+			"code":  "validation.error",
+			"error": err.Error(),
+		})
+		return false
+	}
+	return true
+}
+
 func (r Request) Validations() Validations {
 	return Validations{gin: r.gin}
 }
@@ -183,6 +204,20 @@ func (r Request) Param(name string) string {
 	return r.gin.Param(name)
 }
 
+func (r Request) RequireParam(name string) string {
+	value := r.gin.Param(name)
+	if IsStrEmpty(value) {
+		r.gin.AbortWithStatusJSON(http.StatusBadRequest, H{
+			"message": fmt.Sprintf("Parameter '%s' is missing", name),
+		})
+	}
+	return value
+}
+
+func (r Request) GetArg(key string) interface{}{
+	return r.Context.Application.GetArg(key)
+}
+
 func securityFilter(gc *gin.Context) {
 	h := gc.GetHeader("X-Anonymous-Consumer")
 	if "true" == strings.ToLower(h) {
@@ -213,49 +248,64 @@ func initLogging() {
 	}
 }
 
-func (app *Application) init() {
+func (app *Application) Init(env string) {
+	app.InitWithSource(env, "")
+}
+
+func (app *Application) InitWithSource(env string, source string) {
 	if app.initialized {
 		return
 	}
 
-	app.Env = strings.ToLower(app.Env)
-	filenames := []string{fmt.Sprintf(".env.%s", app.Env), ".env"}
+	app.env = strings.ToLower(env)
+	app.configSource = source
+	filenames := []string{fmt.Sprintf(".env.%s", app.env), ".env"}
 
 	for _, f := range filenames {
 		if err := godotenv.Load(f); err != nil {
 			log.Debug(err)
 		}
 	}
-
-	if app.Config != nil {
-		if err := env.Parse(app.Config); err != nil {
-			log.Warn(err)
-		}
-	}
-
-	if !IsStrEmpty(app.ConfigSource) {
-		if strings.HasPrefix(app.ConfigSource, "vault:") {
-			log.Infof("Loading config from vault: %s", app.ConfigSource)
-			if err := ReadVaultSecret(strings.TrimPrefix(app.ConfigSource, "vault:"), &app.Config); err != nil {
-				log.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)
-			}
-		} else {
-			log.Warnf("configLocation not supported: %s", app.ConfigSource)
-		}
-	}
-
-	app.Datasource.init()
-
-	if !app.IsDevMode() {
+	if app.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	app.globals = map[string]interface{}{}
+
+	if err := app.factory(app); err != nil {
+		log.Fatal(err)
+	}
+
 	app.initialized = true
-	return
+}
+
+func (app *Application) SetArg(key string, value interface{}) {
+	app.globals[key] = value
+}
+
+func (app *Application) GetArg(key string) interface{} {
+	return app.globals[key]
+}
+
+func (app *Application) LoadConfig(dest interface{}) {
+
+	if err := env.Parse(dest); err != nil {
+		log.Warn(err)
+	}
+
+	if !IsStrEmpty(app.configSource) {
+		if strings.HasPrefix(app.configSource, "vault:") {
+			log.Infof("Loading config from vault: %s", app.configSource)
+			if err := ReadVaultSecret(strings.TrimPrefix(app.configSource, "vault:"), dest); err != nil {
+				log.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)
+			}
+		} else {
+			log.Warnf("configLocation not supported: %s", app.configSource)
+		}
+	}
 }
 
 func (app *Application) createRouter() {
-	app.init()
 	if app.router != nil {
 		return
 	}
@@ -318,41 +368,121 @@ func (app *Application) NewTestServer() *httptest.Server {
 }
 
 func (app *Application) ApplyDatabaseMigrations() error {
-	return app.Datasource.Migrate()
+	if !app.initialized {
+		return fmt.Errorf("application is not initialized, call app.Init(env) first")
+	}
+	if app.DbManager == nil {
+		return nil
+	}
+
+	return app.DbManager.migrate()
 }
 
-func (app *Application) Execute() {
-
+func (app Application) Execute() {
+	cobra.OnInitialize()
+	var rootCmd = &cobra.Command{
+		Use:     app.Name,
+		Short:   app.Description,
+		Version: app.Version,
+	}
+	rootCmd.AddCommand(app.createServerCmd())
+	rootCmd.AddCommand(app.createDbCommand())
+	_ = rootCmd.Execute()
 }
+
+func (app *Application) createServerCmd() *cobra.Command {
+	var port int
+	var configSource string
+	var dbMigrations bool
+	var envName string
+
+	cmd := &cobra.Command{
+		Use:   "server",
+		Short: "Start the service in server mode",
+		Run: func(cmd *cobra.Command, args []string) {
+			app.InitWithSource(envName, configSource)
+			if dbMigrations {
+				if err := app.ApplyDatabaseMigrations(); err != nil {
+					log.Fatal(err)
+				}
+			} else {
+				log.Info("database migrations were skipped")
+			}
+			app.Start(port)
+		},
+	}
+	cmd.Flags().StringVarP(&envName, "env", "e", os.Getenv("ENV"), "active environment profile")
+	cmd.Flags().StringVarP(&configSource, "config", "c", os.Getenv("CONFIG_SOURCE"), "config source")
+	cmd.Flags().IntVarP(&port, "port", "p", Getenvi("PORT", 8080), "server port")
+	cmd.Flags().BoolVarP(&dbMigrations, "db-migrations", "m", Getenvb("DB_MIGRATIONS", true), "apply database migrations")
+
+	return cmd
+}
+
+func (app *Application) createDbCommand() *cobra.Command {
+	var configSource string
+	var envName string
+
+	cmd := &cobra.Command{
+		Use:   "db:migrate",
+		Short: "Run database migrations",
+		Run: func(cmd *cobra.Command, args []string) {
+			app.InitWithSource(envName, configSource)
+			if err := app.ApplyDatabaseMigrations(); err != nil {
+				log.Fatal(err)
+			}
+		},
+	}
+	cmd.Flags().StringVarP(&configSource, "config", "c", os.Getenv("CONFIG_SOURCE"), "config source")
+	cmd.Flags().StringVarP(&envName, "env", "e", Getenv(os.Getenv("ENV"), "dev", true), "active environment profile")
+
+	return cmd
+}
+
 func (app *Application) Start(port int) {
+	app.createRouter()
 	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
+}
+
+func (app Application) RegisterMessageHandler(amqpurl string, channel string, handler func(app Application, message Message) error) {
+	CreateTopicMessageListener(amqpurl, channel, app.IsTestEnv(), func(event Message) error {
+		return handler(app, event)
+	})
 }
 
 func init() {
 	initLogging()
 }
 
-func (rc RequestContext) GetEntityManager(tenantId string) EntityManager {
-	return *rc.Application.Datasource.GetTenant(tenantId)
+func (rc RequestContext) PrimaryDbLink() DbLink {
+	return rc.Application.DbManager.GetPrimaryLink()
 }
+func (rc RequestContext) DbLink(name string) DbLink {
+	return rc.Application.DbManager.GetLink(name)
+}
+
+func (rc RequestContext) WithDbLink(id string, cb DbLinkCallback) error {
+	dbm := rc.Application.DbManager
+	return dbm.withLink(id, cb)
+}
+
+func (rc RequestContext) WithTenantDbLink(cb DbLinkCallback) error {
+	return rc.WithDbLink(rc.TenantId, cb)
+}
+
 
 /*
-func (app *App) CreateMessagePublisher(url string) MessagePublisher {
-	return CreateMessagePublisher(url, app.IsDevMode())
-}
+
 
 func (app *App) RegisterBroadcastListener(amqpurl string, channel string, handler MessageHandler) {
-	CreateBroadcastMessageListener(amqpurl, channel, app.IsDevMode(), func(event Message) error {
+	CreateBroadcastMessageListener(amqpurl, channel, app.IsProd(), func(event Message) error {
 		event.Context = app.Context
 		return handler(event)
 	})
 }
 
 func (app *App) CreateMessageListener(amqpurl string, channel string, handler MessageHandler) {
-	CreateTopicMessageListener(amqpurl, channel, app.IsDevMode(), func(event Message) error {
-		event.Context = app.Context
-		return handler(event)
-	})
+
 }
 
 */

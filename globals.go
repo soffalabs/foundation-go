@@ -1,4 +1,4 @@
-package soffa
+package sf
 
 type Credentials struct {
 	Username string
