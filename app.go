@@ -119,6 +119,8 @@ type RequestContext struct {
 	Application *Application
 	TenantId    string
 	HasTenant   bool
+	UserId      string
+	Username    string
 }
 
 type Request struct {
@@ -150,6 +152,12 @@ func (r Response) JSON(status int, body interface{}) {
 
 func (r Response) BadRequest(body interface{}) {
 	r.gin.JSON(http.StatusBadRequest, body)
+}
+
+func (r Response) Forbidden(message string) {
+	r.gin.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+		"message": message,
+	})
 }
 
 func (r Response) Send(res interface{}, err error) {
@@ -483,6 +491,9 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 			if consumer != nil {
 				context.TenantId = consumer.Id
 				context.HasTenant = true
+				context.UserId = consumer.Id
+				context.Username = consumer.Username
+				log.Infof("authenticated request received: %s/%s", context.UserId, context.Username)
 			} else {
 				context.HasTenant = false
 			}
@@ -584,6 +595,10 @@ func (app *Application) Start(port int) {
 
 func init() {
 	initLogging()
+}
+
+func (rc RequestContext) IsTestEnv() bool {
+	return rc.Application.IsTestEnv()
 }
 
 func (rc RequestContext) PrimaryDbLink() DbLink {

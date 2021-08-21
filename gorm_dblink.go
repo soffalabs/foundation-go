@@ -44,8 +44,12 @@ func (em GormDbLink) First(model interface{}) error {
 	return em.Connection.First(model).Error
 }
 
-func (em GormDbLink) Query(dest interface{}, query string, values ...interface{}) error {
-	return em.Connection.Raw(query, values).Scan(&dest).Error
+func (em GormDbLink) Query(dest interface{}, opts *QueryOpts, where string, values ...interface{}) error {
+	q := em.Connection.Model(dest).Where(where, values)
+	if opts != nil && opts.Limit>0 {
+		q = q.Limit(opts.Limit)
+	}
+	return q.Find(dest).Error
 }
 
 func (em GormDbLink) Pluck(table string, column string, dest interface{}) error {

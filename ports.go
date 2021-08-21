@@ -14,6 +14,10 @@ type MessagePublisher interface {
 
 type MessageHandler = func(event Message) error
 
+type QueryOpts struct {
+	First int
+	Limit int
+}
 
 type DbLink interface {
 	Create(model interface{}) error
@@ -21,9 +25,9 @@ type DbLink interface {
 	Exec(raw string) error
 	Transactional(callback func(link DbLink) error) error
 	FindAll(dest interface{}, limit int) error
+	Query(dest interface{}, opts *QueryOpts, where string, args ...interface{}) error
 	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)
 	First(model interface{}) error
-	Query(dest interface{}, query string, args ...interface{}) error
 	Pluck(table string, column string, dest interface{}) error
 	CreateSchema(name string) error
 	Count(model interface{}) (int64, error)

@@ -17,11 +17,10 @@ type DbManager struct {
 	datasourcesMap    map[string]*DataSource
 	initialized       bool
 }
-
+/*
 type Repository interface {
-	Create(model interface{}) error
-	CreateSchema(name string) error
-}
+
+}*/
 
 type DbLinkCallback = func(em DbLink) error
 
@@ -207,5 +206,8 @@ func (b DataSourceManagerBuilder) RegisterSchemaBaseTenants(url string, tenants 
 }
 
 func (b DataSourceManagerBuilder) Get() *DbManager {
+	if err := b.dm.init(); err != nil {
+		log.Fatalf("database manager initialization failed: %v", err)
+	}
 	return b.dm
 }
