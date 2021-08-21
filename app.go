@@ -79,7 +79,7 @@ func (app *Application) AddKongHealthcheck(url string) {
 func (app *Application) AddKongAdminHealthcheck(name string, url string) {
 	app.AddToHealthcheck(ServiceCheck{
 		Name: name,
-		Kind: "Broker",
+		Kind: "Url",
 		Ping: func() error {
 			resp, err := httpClient.Get(fmt.Sprintf("%s/status", url), nil)
 			if err != nil || resp.IsError {
