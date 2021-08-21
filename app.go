@@ -22,18 +22,32 @@ type Application struct {
 	Version     string
 	Routes      []Route
 	DbManager   *DbManager
+
 	// @private
+	//HealthChecks []appCheck
 	env          string
 	configSource string
 	router       *AppRouter
 	initialized  bool
+	healthChecks []ServiceCheck
 	factory      func(app *Application) error
 	globals      map[string]interface{}
 }
 
+type ServiceCheck struct {
+	Name string
+	Kind string
+	Ping func() error
+}
+
+var (
+	httpClient = NewHttpClient(false)
+)
+
 func CreateApp(name string, version, desc string, factory func(app *Application) error) *Application {
 	app := &Application{Name: name, Version: version, Description: desc, env: os.Getenv("ENV")}
 	app.factory = factory
+	app.healthChecks = []ServiceCheck{}
 	return app
 }
 
@@ -43,6 +57,48 @@ func (app Application) IsProd() bool {
 
 func (app Application) IsTestEnv() bool {
 	return app.env == "test"
+}
+
+func (app *Application) AddKongHealthcheck(url string) {
+	app.AddToHealthcheck(ServiceCheck{
+		Name: "Kong",
+		Kind: "Url",
+		Ping: func() error {
+			resp, err := httpClient.Get(url, nil)
+			if err != nil || resp.IsError {
+				return AnyError(err, fmt.Errorf("%s", resp.Body))
+			}
+			json := JsonValue{value: string(resp.Body)}
+			if json.GetString("message", "") == "no Route matched with those values" {
+				return nil
+			}
+			return fmt.Errorf("expectation failed")
+		},
+	})
+}
+func (app *Application) AddKongAdminHealthcheck(name string, url string) {
+	app.AddToHealthcheck(ServiceCheck{
+		Name: name,
+		Kind: "Broker",
+		Ping: func() error {
+			resp, err := httpClient.Get(fmt.Sprintf("%s/status", url), nil)
+			if err != nil || resp.IsError {
+				return AnyError(err, fmt.Errorf("%s", resp.Body))
+			}
+			return nil
+		},
+	})
+}
+
+func (app *Application) AddBrokerHealthcheck(name string, broker MessageBroker) {
+	app.healthChecks = append(app.healthChecks, ServiceCheck{
+		Name: name,
+		Kind: "Broker",
+		Ping: broker.Ping,
+	})
+}
+func (app *Application) AddToHealthcheck(check ServiceCheck) {
+	app.healthChecks = append(app.healthChecks, check)
 }
 
 type AppRouter struct {
@@ -119,7 +175,6 @@ func (r Response) Send(res interface{}, err error) {
 				"message": t.Message,
 			})
 		}
-		log.Error(err)
 	} else {
 		r.OK(res)
 	}
@@ -233,11 +288,6 @@ func securityFilter(gc *gin.Context) {
 	}
 }
 
-func healthechkHandler(_ Request, res Response) {
-	//TODO: check database, amqp, vault
-	res.OK(HealthCheck{Status: "UP"})
-}
-
 func initLogging() {
 	log.SetOutput(os.Stdout)
 	logLevel := Getenv("LOG_LEVEL", "DEBUG", true)
@@ -328,12 +378,89 @@ func (app *Application) createRouter() {
 		Method:  "GET",
 		Paths:   []string{"/status", "/healthz"},
 		Secure:  false,
-		Handler: healthechkHandler,
+		Handler: app.handleHealthCheck,
 	})
 
 	for _, r := range app.Routes {
 		app.router.addRoute(r)
 	}
+}
+
+func (app *Application) getHealthCheck() (bool, []HealthCheck) {
+	var comps []HealthCheck
+	allUp := true
+	if app.DbManager != nil {
+		for _, ds := range app.DbManager.datasources {
+			err := ds.Ping()
+			hc := HealthCheck{
+				Name:   ds.Name,
+				Status: "UP",
+				Kind:   "Database",
+			}
+			if err != nil {
+				message := err.Error()
+				hc.Status = "DOWN"
+				hc.Message = &message
+				allUp = false
+			}
+			comps = append(comps, hc)
+		}
+	}
+
+	if len(app.healthChecks) > 0 {
+		for _, c := range app.healthChecks {
+			err := c.Ping()
+			hc := HealthCheck{
+				Name:   c.Name,
+				Status: "UP",
+				Kind:   c.Kind,
+			}
+			if err != nil {
+				message := err.Error()
+				hc.Status = "DOWN"
+				hc.Message = &message
+				allUp = false
+			}
+			comps = append(comps, hc)
+		}
+	}
+
+	return allUp, comps
+}
+
+func (app *Application) printHealthCheck() {
+	fmt.Println("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+	fmt.Printf("%s:%s\n", app.Name, app.Version)
+	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+	fmt.Println("\nHealthchecks: ")
+	allUp, checks := app.getHealthCheck()
+	for _, hc := range checks {
+		if hc.Status == "UP" {
+			fmt.Printf("> %s.%s: %s\n", hc.Kind, hc.Name, hc.Status)
+		} else {
+			fmt.Printf("> %s.%s:- %s %v\n", hc.Kind, hc.Name, hc.Status, hc.Message)
+		}
+	}
+	if !allUp {
+		_ = Capture(fmt.Sprintf("service.start:%s", app.Name), fmt.Errorf("some components are not healthy"))
+	}
+	fmt.Printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n")
+}
+
+func (app *Application) handleHealthCheck(_ Request, res Response) {
+	status := "UP"
+	allUp, checks := app.getHealthCheck()
+	if !allUp {
+		status = "DOWN"
+	}
+	comps := map[string]HealthCheck{}
+	for _, c := range checks {
+		comps[fmt.Sprintf("%s:%s", strings.ToLower(c.Kind), strings.ToLower(c.Name))] = c
+	}
+	res.OK(H{
+		"status":     status,
+		"components": comps,
+	})
 }
 
 func (router AppRouter) addRoute(r Route) AppRouter {
@@ -448,6 +575,7 @@ func (app *Application) createDbCommand() *cobra.Command {
 
 func (app *Application) Start(port int) {
 	app.createRouter()
+	app.printHealthCheck()
 	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
 }
 

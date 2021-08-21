@@ -109,6 +109,10 @@ func (d DataSource) applyMigrations() error {
 	}
 }
 
+func (d DataSource) Ping() error {
+	return d.dbLink.Ping()
+}
+
 type DatasourceLoader interface {
 	LoadDatasources() ([]DataSource, error)
 }
@@ -165,12 +169,15 @@ func NewDataSourceManagerBuilder() DataSourceManagerBuilder {
 }
 
 func (b DataSourceManagerBuilder) SetPrimary(url string, migrations []*gormigrate.Migration) {
-	ds := &DataSource{Name: "@", Url: url, Primary: true, Migrations: migrations}
+	ds := &DataSource{Name: "primary", Url: url, Primary: true, Migrations: migrations}
 	b.dm.primaryDatasource = ds
 	b.dm.datasources = append(b.dm.datasources, ds)
 }
 
 func (b DataSourceManagerBuilder) Register(name string, url string, migrations []*gormigrate.Migration) {
+	if name == "@" {
+		log.Fatalf("primary is reserved to the primary database, use setPrimary instead")
+	}
 	b.init()
 	ds := &DataSource{
 		Name:       name,

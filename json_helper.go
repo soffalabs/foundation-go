@@ -2,6 +2,7 @@ package sf
 
 import (
 	"encoding/json"
+	log "github.com/sirupsen/logrus"
 )
 
 func ToBytesSafe(input interface{}) []byte {
@@ -17,7 +18,11 @@ func ToJsonStr(input interface{}) (string, error) {
 }
 
 func ToJsonStrSafe(input interface{}) string {
-	data, _ := json.Marshal(input)
+	data, err := json.Marshal(input)
+	if err != nil {
+		log.Warn(err)
+		return ""
+	}
 	return string(data)
 }
 

@@ -30,6 +30,7 @@ type DbLink interface {
 	QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error)
 	ApplyMigrations(migrations []*gormigrate.Migration, schema *string) error
 	UseSchema(name string) error
+	Ping() error
 }
 
 type FakeMessagePublisherImpl struct {

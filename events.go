@@ -11,6 +11,7 @@ import (
 )
 
 type MessageBroker interface {
+	Ping() error
 	Send(topic string, event string, payload interface{}) error
 	Subscribe(topic string, broadcast bool, handler MessageHandler) error
 	Unsubscribe(topic string, handler MessageHandler) error
@@ -55,6 +56,10 @@ func (b *InternalMessageBroker) Unsubscribe(topic string, handler MessageHandler
 	return Capture("internal.brokern.unsubscribe", b.bus.Unsubscribe(topic, handler))
 }
 
+func (b *InternalMessageBroker) Ping() error {
+	return nil
+}
+
 // =========================================================================================================
 
 
@@ -62,6 +67,11 @@ type RabbitMQ struct {
 	MessageBroker
 	url string
 	publisher rabbitmq.Publisher
+}
+
+
+func (b *RabbitMQ) Ping() error {
+	return b.Send("ping", "ping", "PING")
 }
 
 func (b *RabbitMQ) Send(channel string, event string, payload interface{}) error {

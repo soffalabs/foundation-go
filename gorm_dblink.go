@@ -17,6 +17,10 @@ func (em GormDbLink) Create(model interface{}) error {
 	return em.Connection.Create(model).Error
 }
 
+func (em GormDbLink) Ping() error {
+	return em.Connection.Exec("SELECT 1").Error
+}
+
 func (em GormDbLink) Save(model interface{}) error {
 	return em.Connection.Save(model).Error
 }

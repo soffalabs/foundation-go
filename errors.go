@@ -1,14 +1,13 @@
 package sf
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 )
 
 type GenericError struct {
-	Kind    string `json:"string"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Kind    string  `json:"string,omitempty"`
+	Code    string `json:"code,omitempty"`
+	Message string  `json:"message,omitempty"`
 }
 
 type FunctionalError struct {
@@ -30,11 +29,6 @@ type UnauthorizedError struct {
 }
 
 func Capture(operation string, err error) error {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Recovering from panic:", r)
-		}
-	}()
 	if err != nil {
 
 		message := GenericError{}
