@@ -5,7 +5,7 @@ import (
 	"github.com/caarlos0/env"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/spf13/cobra"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
@@ -25,13 +25,14 @@ type Application struct {
 
 	// @private
 	//HealthChecks []appCheck
-	env          string
-	configSource string
-	router       *AppRouter
-	initialized  bool
-	healthChecks []ServiceCheck
-	factory      func(app *Application) error
-	globals      map[string]interface{}
+	env              string
+	configSource     string
+	router           *AppRouter
+	initialized      bool
+	healthChecks     []ServiceCheck
+	factory          func(app *Application) error
+	globals          map[string]interface{}
+	startupListeners []func()
 }
 
 type ServiceCheck struct {
@@ -76,6 +77,13 @@ func (app *Application) AddKongHealthcheck(url string) {
 		},
 	})
 }
+func (app *Application) AddStartupListener(callback func()) {
+	if app.startupListeners == nil {
+		app.startupListeners = []func(){}
+	}
+	app.startupListeners = append(app.startupListeners, callback)
+}
+
 func (app *Application) AddKongAdminHealthcheck(name string, url string) {
 	app.AddToHealthcheck(ServiceCheck{
 		Name: name,
@@ -298,21 +306,6 @@ func securityFilter(gc *gin.Context) bool {
 	return true
 }
 
-func initLogging() {
-	log.SetOutput(os.Stdout)
-	logLevel := Getenv("LOG_LEVEL", "DEBUG", true)
-	if logLevel == "TRACE" {
-		log.SetLevel(log.TraceLevel)
-	} else if logLevel == "DEBUG" {
-		log.SetLevel(log.DebugLevel)
-	} else if logLevel == "WARN" {
-		log.SetLevel(log.WarnLevel)
-	} else if logLevel == "ERROR" {
-		log.SetLevel(log.ErrorLevel)
-	} else {
-		log.SetLevel(log.InfoLevel)
-	}
-}
 
 func (app *Application) Init(env string) {
 	app.InitWithSource(env, "")
@@ -361,7 +354,7 @@ func (app *Application) LoadConfig(dest interface{}) {
 
 	if !IsStrEmpty(app.configSource) {
 		if strings.HasPrefix(app.configSource, "vault:") {
-			log.Infof("Loading config from vault: %s", app.configSource)
+			log.Info("Loading config from vault: %s", app.configSource)
 			if err := ReadVaultSecret(strings.TrimPrefix(app.configSource, "vault:"), dest); err != nil {
 				log.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)
 			}
@@ -493,7 +486,7 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 				context.HasTenant = true
 				context.UserId = consumer.Id
 				context.Username = consumer.Username
-				log.Infof("authenticated request received: %s/%s", context.UserId, context.Username)
+				log.Info("authenticated request received: %s/%s", context.UserId, context.Username)
 			} else {
 				context.HasTenant = false
 			}
@@ -512,6 +505,7 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 
 func (app *Application) NewTestServer() *httptest.Server {
 	app.createRouter()
+	app.invokeStartupListeners()
 	return httptest.NewServer(app.router.engine)
 }
 
@@ -587,14 +581,22 @@ func (app *Application) createDbCommand() *cobra.Command {
 	return cmd
 }
 
+func (app *Application) invokeStartupListeners() {
+	if app.startupListeners != nil {
+		defer func() {
+			for _, l := range app.startupListeners {
+				l()
+			}
+			log.Info("all startup listeneres invoked.")
+		}()
+	}
+}
+
 func (app *Application) Start(port int) {
 	app.createRouter()
 	app.printHealthCheck()
+	app.invokeStartupListeners()
 	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
-}
-
-func init() {
-	initLogging()
 }
 
 func (rc RequestContext) IsTestEnv() bool {

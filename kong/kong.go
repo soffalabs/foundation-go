@@ -2,8 +2,8 @@ package kong
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"github.com/soffa-io/soffa-core-go"
+	"github.com/soffa-io/soffa-core-go/log"
 )
 
 var httpClient sf.HttpClient
@@ -127,6 +127,6 @@ func (k Client) enableGlobalPlugin(name string, config sf.H) error {
 		}
 		return sf.AnyError(err, resp.Err)
 	}
-	log.Infof("kong %s plugin enabled.", name)
+	log.Info("kong %s plugin enabled.", name)
 	return nil
 }

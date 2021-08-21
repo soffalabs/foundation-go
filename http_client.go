@@ -48,13 +48,18 @@ func NewHttpClient(debug bool) HttpClient {
 }
 
 func (c HttpResponse) Decode(dest interface{}) error {
-	return FromJson(string(c.Body), dest)
+	return FromJson(c.Body, dest)
 }
 
 func (c DefaultHttpClient) Get(url string, headers *HttpHeaders) (HttpResponse, error) {
 	h := HttpHeaders{}
 	if headers != nil {
 		h = *headers
+	}
+	if httpInterceptor != nil {
+		if response := httpInterceptor("GET", url, nil, h); response != nil {
+			return *response, nil
+		}
 	}
 	return parseResponse(c.client.R().SetHeaders(h).Get(url))
 }
@@ -69,7 +74,6 @@ func (c DefaultHttpClient) PostForm(url string, formData FormData, headers *Http
 			return *response, nil
 		}
 	}
-
 	return parseResponse(c.client.R().
 		SetHeaders(h).
 		SetFormData(formData).
@@ -91,7 +95,6 @@ func (c DefaultHttpClient) Post(url string, body interface{}, headers *HttpHeade
 		SetHeaders(h).
 		SetBody(body).
 		Post(url))
-
 }
 
 func parseResponse(resp *resty.Response, err error) (HttpResponse, error) {

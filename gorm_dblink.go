@@ -108,7 +108,7 @@ func (em GormDbLink) UseSchema(name string) error {
 func (em GormDbLink) ApplyMigrations(migrations []*gormigrate.Migration, schema *string) error {
 
 	if migrations == nil {
-		log.Infof("[%s] no migrationss found to apply", em.Name)
+		log.Info("[%s] no migrationss found to apply", em.Name)
 		return nil
 	}
 

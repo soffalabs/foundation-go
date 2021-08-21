@@ -2,11 +2,15 @@ package sf
 
 import (
 	"encoding/json"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 )
 
 func ToBytesSafe(input interface{}) []byte {
 	return []byte(ToJsonStrSafe(input))
+}
+
+func ToJson(input interface{}) ([]byte, error) {
+	return json.Marshal(input)
 }
 
 func ToJsonStr(input interface{}) (string, error) {
@@ -26,9 +30,13 @@ func ToJsonStrSafe(input interface{}) string {
 	return string(data)
 }
 
-func FromJson(data string, dest interface{}) error {
-	if err := json.Unmarshal([]byte(data), &dest); err != nil {
+func FromJson(data []byte, dest interface{}) error {
+	if err := json.Unmarshal(data, &dest); err != nil {
 		return err
 	}
 	return nil
+}
+
+func FromJsonStrng(data string, dest interface{}) error {
+	return FromJson([]byte(data), dest)
 }

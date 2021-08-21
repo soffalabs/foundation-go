@@ -2,10 +2,9 @@ package sf
 
 import (
 	"github.com/go-gormigrate/gormigrate/v2"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 )
 
-const FakeAmqpurl = "mocked"
 
 type MessagePublisher interface {
 	Send(channel string, event string, payload interface{}) error

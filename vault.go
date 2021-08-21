@@ -3,7 +3,7 @@ package sf
 import (
 	"fmt"
 	"github.com/hashicorp/vault/api"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 	"net/url"
 )
 
@@ -28,6 +28,10 @@ func ReadVaultSecret(uri string, dest interface{}) error {
 	if secret == nil {
 		return fmt.Errorf("unable to locate %s", u.Path)
 	}
-	return Convert(secret.Data["data"], dest)
+	data, err := ToJson(secret.Data["data"])
+	if err != nil {
+		return err
+	}
+	return FromJson(data, dest)
 
 }

@@ -3,15 +3,15 @@ package sf
 import "fmt"
 
 type HealthCheck struct {
-	Kind   string `json:"kind,omitempty"`
-	Name string `json:"name"`
-	Status string `json:"status"`
+	Kind    string  `json:"kind,omitempty"`
+	Name    string  `json:"name"`
+	Status  string  `json:"status"`
 	Message *string `json:"message,omitempty"`
 }
 
 type Message struct {
-	Event   string      `json:"event"`
-	Payload interface{} `json:"payload,omitempty"`
+	Event   string `json:"event"`
+	Payload []byte `json:"payload,omitempty"`
 }
 
 // H is a shortcut for map[string]interface{}

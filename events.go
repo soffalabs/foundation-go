@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	evbus "github.com/asaskevich/EventBus"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/streadway/amqp"
 	"github.com/wagslane/go-rabbitmq"
 	"strings"
@@ -17,11 +17,10 @@ type MessageBroker interface {
 	Unsubscribe(topic string, handler MessageHandler) error
 }
 
-
 func ConnectToBroker(url string) (MessageBroker, error) {
 	if url == "local" {
 		return &InternalMessageBroker{bus: evbus.New()}, nil
-	}else if strings.HasPrefix( url, "amqp://") {
+	} else if strings.HasPrefix(url, "amqp://") {
 		publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
 		if err != nil {
 			return nil, err
@@ -33,23 +32,24 @@ func ConnectToBroker(url string) (MessageBroker, error) {
 
 // =========================================================================================================
 
-
 type InternalMessageBroker struct {
 	MessageBroker
 	bus evbus.Bus
 }
 
 func (b *InternalMessageBroker) Send(channel string, event string, payload interface{}) error {
-	message := Message{
-		Event:   event,
-		Payload: payload,
+	data, err := prepareMessage(event, payload)
+	if err != nil {
+		return Capture("broker.message.encode", err)
 	}
-	b.bus.Publish(channel, message)
+	b.bus.Publish(channel, data)
 	return nil
 }
 
 func (b *InternalMessageBroker) Subscribe(topic string, _ bool, handler MessageHandler) error {
-	return Capture("internal.broker.subscribe", b.bus.Subscribe(topic, handler))
+	return Capture("internal.broker.subscribe", b.bus.Subscribe(topic, func(body []byte) {
+		_ = handleBrokerMessage(body, handler)
+	}))
 }
 
 func (b *InternalMessageBroker) Unsubscribe(topic string, handler MessageHandler) error {
@@ -62,27 +62,21 @@ func (b *InternalMessageBroker) Ping() error {
 
 // =========================================================================================================
 
-
 type RabbitMQ struct {
 	MessageBroker
-	url string
+	url       string
 	publisher rabbitmq.Publisher
 }
-
 
 func (b *RabbitMQ) Ping() error {
 	return b.Send("ping", "ping", "PING")
 }
 
 func (b *RabbitMQ) Send(channel string, event string, payload interface{}) error {
-	message := Message{
-		Event:   event,
-		Payload: payload,
-	}
-	log.Debugf("[rabbitmq] sending message to %s", channel)
-	data, err := EncodeMessage(message)
+	log.Debug("[rabbitmq] sending message to %s", channel)
+	data, err := prepareMessage(event, payload)
 	if err != nil {
-		return Capture("amqp.message.encode", err)
+		return Capture("broker.message.encode", err)
 	}
 	return Capture("amqp.message.publish", b.publisher.Publish(
 		data,
@@ -105,14 +99,7 @@ func (b *RabbitMQ) Subscribe(topic string, broadcast bool, handler MessageHandle
 	}
 	return consumer.StartConsuming(
 		func(d rabbitmq.Delivery) bool {
-			message, err := DecodeMessage(d.Body)
-			if Capture("amqp.message.decode", err) != nil {
-				return true
-			}
-			if err = Capture("amqp.handle.message", handler(*message)); err != nil {
-				return false
-			}
-			return true
+			return handleBrokerMessage(d.Body, handler)
 		},
 		topic,
 		[]string{"default", ""},
@@ -133,6 +120,30 @@ func (b *RabbitMQ) Unsubscribe(_ string, _ MessageHandler) error {
 
 // =========================================================================================================
 
+func prepareMessage(event string, payload interface{}) ([]byte, error) {
+	data, err := EncodeMessage(payload)
+	if err != nil{
+		return nil, err
+	}
+	message := Message{
+		Event:   event,
+		Payload: data,
+	}
+	return EncodeMessage(message)
+}
+
+func handleBrokerMessage(body []byte, handler MessageHandler) bool {
+	message, err := DecodeMessage(body)
+	if Capture("amqp.message.decode", err) != nil {
+		return true
+	}
+	err = Capture("amqp.handle.message", handler(*message))
+	if err != nil {
+		return false
+	}
+	return true
+}
+
 func EncodeMessage(message interface{}) ([]byte, error) {
 	data, err := json.Marshal(message)
 	if err != nil {
@@ -142,8 +153,8 @@ func EncodeMessage(message interface{}) ([]byte, error) {
 }
 
 func DecodeMessage(body []byte) (*Message, error) {
-	if log.IsLevelEnabled(log.DebugLevel) {
-		log.Debugf("[amqp.inbound] -- %s", body)
+	if log.IsDebugEnabled() {
+		log.Debug("[amqp.inbound] -- %s", body)
 	}
 
 	var message *Message

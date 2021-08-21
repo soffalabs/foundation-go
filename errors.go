@@ -1,8 +1,6 @@
 package sf
 
-import (
-	log "github.com/sirupsen/logrus"
-)
+import "github.com/soffa-io/soffa-core-go/log"
 
 type GenericError struct {
 	Kind    string  `json:"string,omitempty"`
@@ -26,6 +24,10 @@ type UnauthorizedError struct {
 	error
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+func CaptureSilent(operation string, err error)  {
+	_ = Capture(operation, err)
 }
 
 func Capture(operation string, err error) error {

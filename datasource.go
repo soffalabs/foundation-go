@@ -3,7 +3,7 @@ package sf
 import (
 	"fmt"
 	"github.com/go-gormigrate/gormigrate/v2"
-	log "github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/xo/dburl"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
