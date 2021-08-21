@@ -280,7 +280,7 @@ func (r Request) GetArg(key string) interface{} {
 func securityFilter(gc *gin.Context) bool {
 	h := gc.GetHeader("X-Anonymous-Consumer")
 	if "true" == strings.ToLower(h) {
-		message := "anonymous access to this resource is forbidden"
+		message := "Access to this resource is forbidden, please check your apiKey."
 		_ = Capture(fmt.Sprintf("http.guest.access.forbidden:%s", gc.Request.RequestURI), fmt.Errorf(message))
 		gc.AbortWithStatusJSON(403, H{
 			"message": message,
