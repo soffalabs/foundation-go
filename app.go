@@ -306,7 +306,6 @@ func securityFilter(gc *gin.Context) bool {
 	return true
 }
 
-
 func (app *Application) Init(env string) {
 	app.InitWithSource(env, "")
 }
@@ -461,8 +460,11 @@ func (app *Application) handleHealthCheck(_ Request, res Response) {
 		comps[fmt.Sprintf("%s:%s", strings.ToLower(c.Kind), strings.ToLower(c.Name))] = c
 	}
 	res.OK(H{
-		"status":     status,
-		"components": comps,
+		"application": app.Name,
+		"version":     app.Version,
+		"description": app.Description,
+		"status":      status,
+		"components":  comps,
 	})
 }
 
