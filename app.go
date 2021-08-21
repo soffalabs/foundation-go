@@ -277,7 +277,7 @@ func (r Request) GetArg(key string) interface{} {
 	return r.Context.Application.GetArg(key)
 }
 
-func securityFilter(gc *gin.Context) {
+func securityFilter(gc *gin.Context) bool {
 	h := gc.GetHeader("X-Anonymous-Consumer")
 	if "true" == strings.ToLower(h) {
 		message := "anonymous access to this resource is forbidden"
@@ -285,7 +285,9 @@ func securityFilter(gc *gin.Context) {
 		gc.AbortWithStatusJSON(403, H{
 			"message": message,
 		})
+		return false
 	}
+	return true
 }
 
 func initLogging() {
@@ -473,8 +475,8 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 	}
 	for _, path := range paths {
 		router.engine.Handle(r.Method, path, func(gc *gin.Context) {
-			if r.Secure {
-				securityFilter(gc)
+			if r.Secure && !securityFilter(gc) {
+				return
 			}
 			context := RequestContext{Application: router.app}
 			consumer := getKongConsumer(gc)
@@ -489,6 +491,7 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 					"error":   "missing.tenant",
 					"message": "No tenant was provided",
 				})
+				return
 			}
 			r.Handler(Request{gin: gc, Context: context}, Response{gin: gc})
 		})
