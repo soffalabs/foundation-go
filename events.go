@@ -7,7 +7,6 @@ import (
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/streadway/amqp"
 	"github.com/wagslane/go-rabbitmq"
-	"strings"
 )
 
 type Subscription struct {
@@ -24,19 +23,6 @@ type MessageBroker interface {
 	Unsubscribe(topic string, handler MessageHandler) error
 }
 
-func ConnectToBroker(url string) (MessageBroker, error) {
-	if url == "local" {
-		return &InternalMessageBroker{bus: evbus.New()}, nil
-	} else if strings.HasPrefix(url, "amqp://") {
-		publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
-		if err != nil {
-			return nil, err
-		}
-		return &RabbitMQ{url: url, publisher: publisher}, nil
-	}
-	return nil, fmt.Errorf("broker protocol not supported: %s", url)
-}
-
 // =========================================================================================================
 
 type InternalMessageBroker struct {
@@ -50,6 +36,7 @@ func (b *InternalMessageBroker) Send(channel string, event string, payload inter
 		return Capture("broker.message.encode", err)
 	}
 	b.bus.Publish(channel, data)
+	log.Infof("[broker] event %s sent to %s", event, channel)
 	return nil
 }
 
@@ -86,7 +73,7 @@ func (b *RabbitMQ) Send(channel string, event string, payload interface{}) error
 	if err != nil {
 		return Capture("broker.message.encode", err)
 	}
-	return Capture("amqp.message.publish", b.publisher.Publish(
+	err = Capture("amqp.message.publish", b.publisher.Publish(
 		data,
 		[]string{"default"},
 		rabbitmq.WithPublishOptionsContentType("text/plain"),
@@ -94,6 +81,10 @@ func (b *RabbitMQ) Send(channel string, event string, payload interface{}) error
 		rabbitmq.WithPublishOptionsPersistentDelivery,
 		rabbitmq.WithPublishOptionsExchange(channel),
 	))
+	if err == nil {
+		log.Infof("[rabbitmq] event %s sent to %s", event, channel)
+	}
+	return err
 }
 
 func (b *RabbitMQ) Subscribe(topic string, broadcast bool, handler MessageHandler) {

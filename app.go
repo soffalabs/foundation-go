@@ -524,7 +524,6 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 				context.HasTenant = true
 				context.UserId = consumer.Id
 				context.Username = consumer.Username
-				log.Info("authenticated request received: %s/%s", context.UserId, context.Username)
 			} else {
 				context.HasTenant = false
 			}
