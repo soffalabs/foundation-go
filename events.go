@@ -10,10 +10,17 @@ import (
 	"strings"
 )
 
+type Subscription struct {
+	Topic     string
+	Broadcast bool
+	Handler   MessageHandler
+}
+
 type MessageBroker interface {
 	Ping() error
 	Send(topic string, event string, payload interface{}) error
-	Subscribe(topic string, broadcast bool, handler MessageHandler) error
+	Subscribe(topic string, broadcast bool, handler MessageHandler)
+	SubscribeAll(sub Subscription) error
 	Unsubscribe(topic string, handler MessageHandler) error
 }
 
@@ -46,10 +53,11 @@ func (b *InternalMessageBroker) Send(channel string, event string, payload inter
 	return nil
 }
 
-func (b *InternalMessageBroker) Subscribe(topic string, _ bool, handler MessageHandler) error {
-	return Capture("internal.broker.subscribe", b.bus.Subscribe(topic, func(body []byte) {
+func (b *InternalMessageBroker) Subscribe(topic string, _ bool, handler MessageHandler) {
+	err := b.bus.Subscribe(topic, func(body []byte) {
 		_ = handleBrokerMessage(body, handler)
-	}))
+	})
+	log.FatalErr(Capture("internal.broker.subscribe", err))
 }
 
 func (b *InternalMessageBroker) Unsubscribe(topic string, handler MessageHandler) error {
@@ -88,28 +96,28 @@ func (b *RabbitMQ) Send(channel string, event string, payload interface{}) error
 	))
 }
 
-func (b *RabbitMQ) Subscribe(topic string, broadcast bool, handler MessageHandler) error {
+func (b *RabbitMQ) Subscribe(topic string, broadcast bool, handler MessageHandler) {
 	kind := "topic"
 	if broadcast {
 		kind = "fanout"
 	}
 	consumer, err := rabbitmq.NewConsumer(b.url, amqp.Config{})
-	if err != nil {
-		return Capture("rabbitmq.connect", err)
+	if err == nil {
+		err = consumer.StartConsuming(
+			func(d rabbitmq.Delivery) bool {
+				return handleBrokerMessage(d.Body, handler)
+			},
+			topic,
+			[]string{"default", ""},
+			rabbitmq.WithConsumeOptionsConcurrency(10),
+			rabbitmq.WithConsumeOptionsQueueDurable,
+			rabbitmq.WithConsumeOptionsQuorum,
+			rabbitmq.WithConsumeOptionsBindingExchangeName(topic),
+			rabbitmq.WithConsumeOptionsBindingExchangeKind(kind),
+			rabbitmq.WithConsumeOptionsBindingExchangeDurable,
+		)
 	}
-	return consumer.StartConsuming(
-		func(d rabbitmq.Delivery) bool {
-			return handleBrokerMessage(d.Body, handler)
-		},
-		topic,
-		[]string{"default", ""},
-		rabbitmq.WithConsumeOptionsConcurrency(10),
-		rabbitmq.WithConsumeOptionsQueueDurable,
-		rabbitmq.WithConsumeOptionsQuorum,
-		rabbitmq.WithConsumeOptionsBindingExchangeName(topic),
-		rabbitmq.WithConsumeOptionsBindingExchangeKind(kind),
-		rabbitmq.WithConsumeOptionsBindingExchangeDurable,
-	)
+	log.FatalErr(Capture("rabbitmq.connect", err))
 }
 
 func (b *RabbitMQ) Unsubscribe(_ string, _ MessageHandler) error {
@@ -122,7 +130,7 @@ func (b *RabbitMQ) Unsubscribe(_ string, _ MessageHandler) error {
 
 func prepareMessage(event string, payload interface{}) ([]byte, error) {
 	data, err := EncodeMessage(payload)
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
 	message := Message{

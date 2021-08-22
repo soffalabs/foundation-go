@@ -20,19 +20,20 @@ type Application struct {
 	Name        string
 	Description string
 	Version     string
-	Routes      []Route
-	DbManager   *DbManager
+	routes      []Route
 
 	// @private
 	//HealthChecks []appCheck
 	env              string
 	configSource     string
-	router           *AppRouter
+	Router           *AppRouter
 	initialized      bool
 	healthChecks     []ServiceCheck
-	factory          func(app *Application) error
+	factory          func(app *Application)
 	globals          map[string]interface{}
 	startupListeners []func()
+	messageBroker    *MessageBroker
+	dataSources      []*DataSource
 }
 
 type ServiceCheck struct {
@@ -45,10 +46,11 @@ var (
 	httpClient = NewHttpClient(false)
 )
 
-func CreateApp(name string, version, desc string, factory func(app *Application) error) *Application {
+func CreateApp(name string, version, desc string, factory func(app *Application)) *Application {
 	app := &Application{Name: name, Version: version, Description: desc, env: os.Getenv("ENV")}
 	app.factory = factory
 	app.healthChecks = []ServiceCheck{}
+	app.Router = app.CreateRouter()
 	return app
 }
 
@@ -77,6 +79,7 @@ func (app *Application) AddKongHealthcheck(url string) {
 		},
 	})
 }
+
 func (app *Application) AddStartupListener(callback func()) {
 	if app.startupListeners == nil {
 		app.startupListeners = []func(){}
@@ -84,27 +87,33 @@ func (app *Application) AddStartupListener(callback func()) {
 	app.startupListeners = append(app.startupListeners, callback)
 }
 
-func (app *Application) AddKongAdminHealthcheck(name string, url string) {
-	app.AddToHealthcheck(ServiceCheck{
-		Name: name,
-		Kind: "Url",
-		Ping: func() error {
-			resp, err := httpClient.Get(fmt.Sprintf("%s/status", url), nil)
-			if err != nil || resp.IsError {
-				return AnyError(err, fmt.Errorf("%s", resp.Body))
-			}
-			return nil
-		},
-	})
+
+func (app *Application) GetMessageBroker() MessageBroker {
+	if app.messageBroker == nil {
+		log.Fatal("No message broker found.")
+	}
+	return *app.messageBroker
+}
+
+
+func (app *Application) GetDataSource() *DataSource {
+	if app.dataSources == nil {
+		log.Fatal("No datasource found.")
+	}
+	return app.dataSources[0]
 }
 
 func (app *Application) AddBrokerHealthcheck(name string, broker MessageBroker) {
+	if app.messageBroker == nil {
+		app.messageBroker = &broker
+	}
 	app.healthChecks = append(app.healthChecks, ServiceCheck{
 		Name: name,
 		Kind: "Broker",
 		Ping: broker.Ping,
 	})
 }
+
 func (app *Application) AddToHealthcheck(check ServiceCheck) {
 	app.healthChecks = append(app.healthChecks, check)
 }
@@ -112,6 +121,7 @@ func (app *Application) AddToHealthcheck(check ServiceCheck) {
 type AppRouter struct {
 	engine *gin.Engine
 	app    *Application
+	routes []Route
 }
 
 type Route struct {
@@ -324,16 +334,13 @@ func (app *Application) InitWithSource(env string, source string) {
 			log.Debug(err)
 		}
 	}
+
 	if app.IsProd() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	app.globals = map[string]interface{}{}
-
-	if err := Capture("app.bootstrap", app.factory(app)); err != nil {
-		log.Fatal(err)
-	}
-
+	app.factory(app)
 	app.initialized = true
 }
 
@@ -363,36 +370,40 @@ func (app *Application) LoadConfig(dest interface{}) {
 	}
 }
 
-func (app *Application) createRouter() {
-	if app.router != nil {
-		return
-	}
+func (app *Application) CreateRouter() *AppRouter {
 	r := gin.Default()
-
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
-
-	app.router = &AppRouter{
+	router := &AppRouter{
 		engine: r,
 		app:    app,
 	}
-
-	app.router.addRoute(Route{
+	router.Add(&Route{
 		Method:  "GET",
 		Paths:   []string{"/status", "/healthz"},
 		Secure:  false,
 		Handler: app.handleHealthCheck,
 	})
+	/*
+		for _, r := range app.routes {
+			app.router.addRoute(r)
+		}
+	*/
+	return router
+}
 
-	for _, r := range app.Routes {
-		app.router.addRoute(r)
+func (app *Application) RegisterDatasource(ds *DataSource) {
+	if app.dataSources == nil {
+		app.dataSources = []*DataSource{}
 	}
+	log.FatalErr(ds.Init())
+	app.dataSources = append(app.dataSources, ds)
 }
 
 func (app *Application) getHealthCheck() (bool, []HealthCheck) {
 	var comps []HealthCheck
 	allUp := true
-	if app.DbManager != nil {
-		for _, ds := range app.DbManager.datasources {
+	if app.dataSources != nil {
+		for _, ds := range app.dataSources {
 			err := ds.Ping()
 			hc := HealthCheck{
 				Name:   ds.Name,
@@ -468,7 +479,32 @@ func (app *Application) handleHealthCheck(_ Request, res Response) {
 	})
 }
 
-func (router AppRouter) addRoute(r Route) AppRouter {
+func (route *Route) Secured() *Route {
+	route.Secure = true
+	return route
+}
+
+func (router *AppRouter) GET(path string, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:  "GET",
+		Path:    path,
+		Handler: handler,
+	}
+	router.Add(route)
+	return route
+}
+
+func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:  "POST",
+		Path:    path,
+		Handler: handler,
+	}
+	router.Add(route)
+	return route
+}
+
+func (router *AppRouter) Add(r *Route) *AppRouter {
 	var paths []string
 	if !IsStrEmpty(r.Path) {
 		paths = append(paths, r.Path)
@@ -506,20 +542,24 @@ func (router AppRouter) addRoute(r Route) AppRouter {
 }
 
 func (app *Application) NewTestServer() *httptest.Server {
-	app.createRouter()
+	//app.createRouter()
 	app.invokeStartupListeners()
-	return httptest.NewServer(app.router.engine)
+	return httptest.NewServer(app.Router.engine)
 }
 
 func (app *Application) ApplyDatabaseMigrations() error {
 	if !app.initialized {
 		return fmt.Errorf("application is not initialized, call app.Init(env) first")
 	}
-	if app.DbManager == nil {
+	if app.dataSources == nil {
 		return nil
 	}
-
-	return Capture("database.migration", app.DbManager.migrate())
+	for _, ds := range app.dataSources {
+		if err := ds.ApplyMigrations(nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (app Application) Execute() {
@@ -595,28 +635,20 @@ func (app *Application) invokeStartupListeners() {
 }
 
 func (app *Application) Start(port int) {
-	app.createRouter()
+	//app.createRouter()
 	app.printHealthCheck()
 	app.invokeStartupListeners()
-	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
+	_ = app.Router.engine.Run(fmt.Sprintf(":%d", port))
+}
+
+func (app Application) Subscribe(topic string, broadcast bool, handler func(message Message) error) {
+	if app.messageBroker == nil {
+		log.Fatal("no broker configured")
+	}
+	(*app.messageBroker).Subscribe(topic, broadcast, handler)
 }
 
 func (rc RequestContext) IsTestEnv() bool {
 	return rc.Application.IsTestEnv()
 }
 
-func (rc RequestContext) PrimaryDbLink() DbLink {
-	return rc.Application.DbManager.GetPrimaryLink()
-}
-func (rc RequestContext) DbLink(name string) DbLink {
-	return rc.Application.DbManager.GetLink(name)
-}
-
-func (rc RequestContext) WithDbLink(id string, cb DbLinkCallback) error {
-	dbm := rc.Application.DbManager
-	return dbm.withLink(id, cb)
-}
-
-func (rc RequestContext) WithTenantDbLink(cb DbLinkCallback) error {
-	return rc.WithDbLink(rc.TenantId, cb)
-}

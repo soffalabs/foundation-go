@@ -45,6 +45,12 @@ func Fatal(args ...interface{}) {
 	logrus.Fatal(args...)
 }
 
+func FatalErr(err error) {
+	if err != nil {
+		logrus.Fatal(err)
+	}
+}
+
 func IsDebugEnabled() bool {
 	return logrus.IsLevelEnabled(logrus.DebugLevel)
 }

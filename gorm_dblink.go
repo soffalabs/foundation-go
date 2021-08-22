@@ -113,7 +113,7 @@ func (em GormDbLink) ApplyMigrations(migrations []*gormigrate.Migration, schema 
 	}
 
 	return em.Connection.Transaction(func(tx *gorm.DB) error {
-		if schema != nil {
+		if schema != nil  && tx.Dialector.Name() != "sqlite" {
 			if res := tx.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", *schema)); res.Error != nil {
 				return res.Error
 			}
