@@ -7,6 +7,7 @@ import (
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/streadway/amqp"
 	"github.com/wagslane/go-rabbitmq"
+	"strings"
 )
 
 type Subscription struct {
@@ -21,6 +22,19 @@ type MessageBroker interface {
 	Subscribe(topic string, broadcast bool, handler MessageHandler)
 	SubscribeAll(sub Subscription) error
 	Unsubscribe(topic string, handler MessageHandler) error
+}
+
+func ConnectToBroker(url string) (MessageBroker, error) {
+	if url == "local" {
+		return &InternalMessageBroker{bus: evbus.New()}, nil
+	} else if strings.HasPrefix(url, "amqp://") {
+		publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
+		if err != nil {
+			return nil, err
+		}
+		return &RabbitMQ{url: url, publisher: publisher}, nil
+	}
+	return nil, fmt.Errorf("broker protocol not supported: %s", url)
 }
 
 // =========================================================================================================
