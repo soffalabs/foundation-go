@@ -7,7 +7,7 @@ import (
 	"net/url"
 )
 
-type VaultInterceptor = func() H
+type VaultInterceptor = func() map[string]interface{}
 
 var (
 	vaultInterceptor *VaultInterceptor
