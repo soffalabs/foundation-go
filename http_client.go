@@ -15,6 +15,7 @@ type HttpClient interface {
 	Get(url string, headers *HttpHeaders) (HttpResponse, error)
 	PostForm(url string, formData FormData, headers *HttpHeaders) (HttpResponse, error)
 	Post(url string, payload interface{}, headers *HttpHeaders) (HttpResponse, error)
+	Delete(url string, payload interface{}, headers *HttpHeaders) (HttpResponse, error)
 }
 
 type HttpResponse struct {
@@ -100,6 +101,22 @@ func (c DefaultHttpClient) Post(url string, body interface{}, headers *HttpHeade
 	}
 	if httpInterceptor != nil {
 		if response := httpInterceptor("POST", url, body, h); response != nil {
+			return *response, nil
+		}
+	}
+	return parseResponse(c.client.R().
+		SetHeaders(h).
+		SetBody(body).
+		Post(url))
+}
+
+func (c DefaultHttpClient) Delete(url string, body interface{}, headers *HttpHeaders) (HttpResponse, error) {
+	h := HttpHeaders{}
+	if headers != nil {
+		h = *headers
+	}
+	if httpInterceptor != nil {
+		if response := httpInterceptor("DELETE", url, body, h); response != nil {
 			return *response, nil
 		}
 	}
