@@ -19,12 +19,12 @@ type AppRouter struct {
 }
 
 type Route struct {
-	Method         string
-	Path           string
-	Paths          []string
-	Secure         bool
-	TenantRequired bool
-	Handler        HandlerFunc
+	Method    string
+	Path      string
+	Paths     []string
+	IsSecure    bool
+	HasTenant bool
+	Handler   HandlerFunc
 }
 
 type Props struct {
@@ -38,7 +38,6 @@ type RequestContext struct {
 	Application *Application
 	TenantId    string
 	HasTenant   bool
-	UserId      string
 	Username    string
 }
 
@@ -105,7 +104,7 @@ func (app *Application) Init(env string) {
 		router.Add(&Route{
 			Method:  "GET",
 			Paths:   []string{"/status", "/healthz"},
-			Secure:  false,
+			IsSecure:  false,
 			Handler: app.handleHealthCheck,
 		})
 		app.router = router

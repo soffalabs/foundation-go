@@ -183,11 +183,23 @@ func (ds DataSource) ExistsBy(model interface{}, where string, args ...interface
 	return count > 0, nil
 }
 
-func (ds DataSource) UseSchema(name string) error {
+func (ds *DataSource) UseSchema(name string) error {
+	if ds.connection.Dialector.Name() == "sqlite" {
+		return nil
+	}
 	if res := ds.connection.Exec(fmt.Sprintf("SET search_path to %s", name)); res.Error != nil {
 		return res.Error
 	}
 	return nil
+}
+
+func (ds DataSource) WithTenant(name string, cb func(ds DataSource) error) error {
+	return ds.Transactional(func(link DataSource) error {
+		if err := link.UseSchema(name); err != nil {
+			return err
+		}
+		return cb(link)
+	})
 }
 
 func (ds DataSource) internalMigrations(prefix string, migrations []*gormigrate.Migration, schema *string) error {

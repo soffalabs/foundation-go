@@ -21,26 +21,34 @@ type HTTPError struct {
 // *********************************************************************************************************************
 
 
-func (route *Route) Secured() *Route {
-	route.Secure = true
-	return route
-}
-
-func (router *AppRouter) GET(path string, handler HandlerFunc) *Route {
+func (router *AppRouter) GET(path string, secure bool, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "GET",
 		Path:    path,
 		Handler: handler,
+		IsSecure: secure,
 	}
 	router.Add(route)
 	return route
 }
 
-func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
+func (router *AppRouter) POST(path string, secure bool, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "POST",
 		Path:    path,
 		Handler: handler,
+		IsSecure: secure,
+	}
+	router.Add(route)
+	return route
+}
+
+func (router *AppRouter) PUT(path string, secure bool, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:  "PUT",
+		Path:    path,
+		Handler: handler,
+		IsSecure: secure,
 	}
 	router.Add(route)
 	return route
@@ -56,25 +64,16 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	}
 	for _, path := range paths {
 		router.engine.Handle(r.Method, path, func(gc *gin.Context) {
-			if r.Secure && !securityFilter(gc) {
+			if r.IsSecure && !securityFilter(gc) {
 				return
 			}
 			context := RequestContext{Application: router.app}
 			consumer := getKongConsumer(gc)
 			if consumer != nil {
-				context.TenantId = consumer.Id
 				context.HasTenant = true
-				context.UserId = consumer.Id
 				context.Username = consumer.Username
 			} else {
 				context.HasTenant = false
-			}
-			if r.TenantRequired && !context.HasTenant {
-				gc.AbortWithStatusJSON(403, H{
-					"error":   "missing.tenant",
-					"message": "No tenant was provided",
-				})
-				return
 			}
 			r.Handler(Request{gin: gc, Context: context}, Response{gin: gc})
 		})
@@ -110,7 +109,7 @@ func (r Response) Forbidden(message string) {
 	})
 }
 
-func (r Response) Send(res interface{}, err error) {
+func (r Response) Send(res interface{}, err error) error {
 	if err != nil {
 		switch t := err.(type) {
 		default:
@@ -136,6 +135,7 @@ func (r Response) Send(res interface{}, err error) {
 	} else {
 		r.OK(res)
 	}
+	return err
 }
 
 // *********************************************************************************************************************
