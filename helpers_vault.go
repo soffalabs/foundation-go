@@ -17,7 +17,7 @@ func SetVaultInterceptor(fn VaultInterceptor) {
 	vaultInterceptor = &fn
 }
 
-func ReadVaultSecret(uri string) (H, error) {
+func ReadVaultSecret(uri string) (map[string]interface{}, error) {
 
 	var secret *api.Secret
 
@@ -48,6 +48,5 @@ func ReadVaultSecret(uri string) (H, error) {
 		}
 	}
 
-
-	return secret.Data["data"].(H), nil
+	return secret.Data["data"].(map[string]interface{}), nil
 }

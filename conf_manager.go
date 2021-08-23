@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+type ConfManager struct {
+	Env        string
+	VaultUrl   string
+	vaultData  map[string]interface{}
+}
+
 func newConfManager(env string) ConfManager {
 
 	filenames := []string{fmt.Sprintf(".env.%s", strings.ToLower(env)), ".env"}
