@@ -85,7 +85,6 @@ type ServiceCheck struct {
 	Ping func() error
 }
 
-
 // *********************************************************************************************************************
 // *********************************************************************************************************************
 
@@ -144,18 +143,12 @@ func (app *Application) AddHealthCheck(name string, kind string, ping func() err
 }
 
 func (app *Application) AddDataSource(name string, url string, migrations []*gormigrate.Migration) *DataSource {
-	ds := &DataSource{
-		Name:       name,
-		Url:        url,
-		Migrations: migrations,
-	}
-	log.FatalErr(ds.bootstrap())
-	app.dataSources = append(app.dataSources, ds)
-	return ds
+	return app.AddMultitenanDataSource(name, url, migrations, nil)
 }
 
 func (app *Application) AddMultitenanDataSource(name string, url string, migrations []*gormigrate.Migration, loader func() ([]string, error)) *DataSource {
 	ds := &DataSource{
+		ServiceName:   strings.TrimPrefix(app.Name, "bantu-"),
 		Name:          name,
 		Url:           url,
 		Migrations:    migrations,

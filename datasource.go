@@ -8,11 +8,13 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"strings"
 )
 
 type DbLinkCallback = func(ds DataSource) error
 
 type DataSource struct {
+	ServiceName string
 	Name          string
 	Url           string
 	TenantsLoader func() ([]string, error)
@@ -41,8 +43,10 @@ type TenantsLoader struct {
 // *********************************************************************************************************************
 
 func (ds DataSource) Migrate(schema *string) error {
+	AssertNotEmpty(ds.ServiceName, "Datasource serviceName is required")
+	AssertNotEmpty(ds.Name, "Datasource name is required")
 	if schema != nil {
-		return ds.internalMigrations(ds.Migrations, schema)
+		return ds.internalMigrations(ds.ServiceName, ds.Migrations, schema)
 	} else if ds.TenantsLoader != nil {
 		log.Info("Factory datasource found, scanning all schemas")
 		items, err := ds.TenantsLoader()
@@ -50,13 +54,13 @@ func (ds DataSource) Migrate(schema *string) error {
 			return err
 		}
 		for _, sc := range items {
-			if err = ds.internalMigrations(ds.Migrations, &sc); err != nil {
+			if err = ds.internalMigrations(ds.ServiceName, ds.Migrations, &sc); err != nil {
 				return err
 			}
 		}
 		return nil
 	} else {
-		return ds.internalMigrations(ds.Migrations, nil)
+		return ds.internalMigrations(ds.ServiceName, ds.Migrations, nil)
 	}
 }
 
@@ -186,7 +190,7 @@ func (ds DataSource) UseSchema(name string) error {
 	return nil
 }
 
-func (ds DataSource) internalMigrations(migrations []*gormigrate.Migration, schema *string) error {
+func (ds DataSource) internalMigrations(prefix string, migrations []*gormigrate.Migration, schema *string) error {
 
 	if migrations == nil {
 		log.Info("[%s] no migrationss found to apply", ds.Name)
@@ -202,7 +206,14 @@ func (ds DataSource) internalMigrations(migrations []*gormigrate.Migration, sche
 				return res.Error
 			}
 		}
-		m := gormigrate.New(tx, gormigrate.DefaultOptions, migrations)
+		tableName := fmt.Sprintf("_%s_%s", strings.ReplaceAll(prefix, "-", "_"), gormigrate.DefaultOptions.TableName)
+		m := gormigrate.New(tx, &gormigrate.Options{
+			TableName:                 tableName,
+			IDColumnName:              gormigrate.DefaultOptions.IDColumnName,
+			IDColumnSize:              gormigrate.DefaultOptions.IDColumnSize,
+			UseTransaction:            gormigrate.DefaultOptions.UseTransaction,
+			ValidateUnknownMigrations: gormigrate.DefaultOptions.ValidateUnknownMigrations,
+		}, migrations)
 		if err := m.Migrate(); err != nil {
 			return fmt.Errorf("[%s] could not be migrated -- %v", ds.Name, err)
 		} else {
