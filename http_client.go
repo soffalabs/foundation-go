@@ -1,4 +1,4 @@
-package sf
+package soffa_core
 
 import (
 	"crypto/tls"
@@ -23,6 +23,7 @@ type HttpResponse struct {
 	IsError bool
 	Err     error
 }
+
 type DefaultHttpClient struct {
 	client *resty.Client
 }
@@ -30,6 +31,7 @@ type DefaultHttpClient struct {
 var (
 	httpInterceptor HttpInterceptor
 )
+
 
 func RegisterHttpInterceptor(interceptor HttpInterceptor) {
 	httpInterceptor = interceptor
@@ -49,6 +51,16 @@ func NewHttpClient(debug bool) HttpClient {
 
 func (c HttpResponse) Decode(dest interface{}) error {
 	return FromJson(c.Body, dest)
+}
+
+func (c *HttpResponse) WithJsonBody(body interface{}) *HttpResponse {
+	data, _ := ToJson(body)
+	c.Body = data
+	return c
+}
+func NewHttpResponse(status int, body interface{}) *HttpResponse {
+	data, _ := ToJson(body)
+	return &HttpResponse{Status:status, Body: data}
 }
 
 func (c DefaultHttpClient) Get(url string, headers *HttpHeaders) (HttpResponse, error) {

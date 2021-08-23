@@ -1,4 +1,4 @@
-package sf
+package soffa_core
 
 func AnyStr(candidates ...string) string {
 	for _,s := range candidates {

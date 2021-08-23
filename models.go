@@ -1,4 +1,4 @@
-package sf
+package soffa_core
 
 import "fmt"
 
@@ -36,4 +36,15 @@ func Err(err error) R {
 
 func Errf(format string, args ...interface{}) R {
 	return R{Error: fmt.Errorf(format, args...)}
+}
+
+func (hc HealthCheck) get(err error)  HealthCheck{
+	if err != nil {
+		hc.Status = "DOWN"
+		msg := err.Error()
+		hc.Message = &msg
+	}else {
+		hc.Status = "UP"
+	}
+	return hc
 }

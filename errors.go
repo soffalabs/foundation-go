@@ -1,4 +1,4 @@
-package sf
+package soffa_core
 
 import "github.com/soffa-io/soffa-core-go/log"
 
@@ -28,6 +28,16 @@ type UnauthorizedError struct {
 
 func CaptureSilent(operation string, err error)  {
 	_ = Capture(operation, err)
+}
+
+
+func GetAnyMessage(err error) *string {
+	var message *string
+	if err != nil {
+		msg := err.Error()
+		message = &msg
+	}
+	return message
 }
 
 func Capture(operation string, err error) error {

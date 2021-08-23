@@ -1,7 +1,6 @@
-package sf
+package soffa_core
 
 import (
-	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/soffa-io/soffa-core-go/log"
 )
 
@@ -18,23 +17,6 @@ type QueryOpts struct {
 	Limit int
 }
 
-type DbLink interface {
-	Create(model interface{}) error
-	Save(model interface{}) error
-	Exec(raw string) error
-	Transactional(callback func(link DbLink) error) error
-	FindAll(dest interface{}, limit int) error
-	Query(dest interface{}, opts *QueryOpts, where string, args ...interface{}) error
-	ExistsBy(model interface{}, where string, args ...interface{}) (bool, error)
-	First(model interface{}) error
-	Pluck(table string, column string, dest interface{}) error
-	CreateSchema(name string) error
-	Count(model interface{}) (int64, error)
-	QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error)
-	ApplyMigrations(migrations []*gormigrate.Migration, schema *string) error
-	UseSchema(name string) error
-	Ping() error
-}
 
 type FakeMessagePublisherImpl struct {
 	MessagePublisher

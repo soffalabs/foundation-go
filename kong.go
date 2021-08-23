@@ -1,4 +1,4 @@
-package sf
+package soffa_core
 
 type KongConsumerInfo struct {
 	Id       string
