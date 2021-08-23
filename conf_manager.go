@@ -21,7 +21,7 @@ func newConfManager(env string) ConfManager {
 	filenames := []string{fmt.Sprintf(".env.%s", strings.ToLower(env)), ".env"}
 	for _, f := range filenames {
 		if err := godotenv.Load(f); err == nil {
-			log.Info("%s file loaded", f)
+			log.Infof("%s file loaded", f)
 		}
 	}
 
@@ -31,7 +31,7 @@ func newConfManager(env string) ConfManager {
 	}
 
 	if !IsStrEmpty(conf.VaultUrl) {
-		log.Info("Loading config from vault: %s", conf.VaultUrl)
+		log.Infof("Loading config from vault: %s", conf.VaultUrl)
 		data, err := ReadVaultSecret(conf.VaultUrl)
 		if err != nil {
 			log.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)

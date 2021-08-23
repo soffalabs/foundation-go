@@ -23,6 +23,6 @@ type FakeMessagePublisherImpl struct {
 }
 
 func (p FakeMessagePublisherImpl) Send(channel string, message Message) error {
-	log.Info("[FakerPublisher] Message sent to channel: %s", channel)
+	log.Infof("[FakerPublisher] Message sent to channel: %s", channel)
 	return nil
 }

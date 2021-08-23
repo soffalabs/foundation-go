@@ -205,7 +205,7 @@ func (ds DataSource) WithTenant(name string, cb func(ds DataSource) error) error
 func (ds DataSource) internalMigrations(prefix string, migrations []*gormigrate.Migration, schema *string) error {
 
 	if migrations == nil {
-		log.Info("[%s] no migrationss found to apply", ds.Name)
+		log.Infof("[%s] no migrationss found to apply", ds.Name)
 		return nil
 	}
 

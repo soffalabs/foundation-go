@@ -178,7 +178,7 @@ func handleBrokerMessage(body []byte, handler MessageHandler) bool {
 	if Capture("amqp.message.decode", err) != nil {
 		return true
 	}
-	log.Info("[rabbitmq] event received to %s", message.Event)
+	log.Infof("[rabbitmq] event received to %s", message.Event)
 	err = Capture("amqp.handle.message", handler(*message))
 	if err != nil {
 		return false
@@ -196,7 +196,7 @@ func EncodeMessage(message interface{}) ([]byte, error) {
 
 func DecodeMessage(body []byte) (*Message, error) {
 	if log.IsDebugEnabled() {
-		log.Debug("[amqp.inbound] -- %s", body)
+		log.Debug("[amqp.controllers] -- %s", body)
 	}
 
 	var message *Message
