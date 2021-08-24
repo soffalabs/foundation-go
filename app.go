@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -22,7 +23,7 @@ type Route struct {
 	Method    string
 	Path      string
 	Paths     []string
-	IsSecure    bool
+	IsSecure  bool
 	HasTenant bool
 	Handler   HandlerFunc
 }
@@ -43,6 +44,7 @@ type RequestContext struct {
 
 type Request struct {
 	gin     *gin.Context
+	Raw     *http.Request
 	Context RequestContext
 }
 
@@ -102,10 +104,10 @@ func (app *Application) Init(env string) {
 			app:    app,
 		}
 		router.Add(&Route{
-			Method:  "GET",
-			Paths:   []string{"/status", "/healthz"},
-			IsSecure:  false,
-			Handler: app.handleHealthCheck,
+			Method:   "GET",
+			Paths:    []string{"/status", "/healthz"},
+			IsSecure: false,
+			Handler:  app.handleHealthCheck,
 		})
 		app.router = router
 	}

@@ -5,6 +5,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -14,18 +16,26 @@ type HTTPError struct {
 	Message string `json:"message"`
 }
 
-
-
 // *********************************************************************************************************************
 // Router
 // *********************************************************************************************************************
 
+func (router *AppRouter) Any(path string, secure bool, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:   "*",
+		Path:     path,
+		Handler:  handler,
+		IsSecure: secure,
+	}
+	router.Add(route)
+	return route
+}
 
 func (router *AppRouter) GET(path string, secure bool, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:  "GET",
-		Path:    path,
-		Handler: handler,
+		Method:   "GET",
+		Path:     path,
+		Handler:  handler,
 		IsSecure: secure,
 	}
 	router.Add(route)
@@ -34,9 +44,9 @@ func (router *AppRouter) GET(path string, secure bool, handler HandlerFunc) *Rou
 
 func (router *AppRouter) POST(path string, secure bool, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:  "POST",
-		Path:    path,
-		Handler: handler,
+		Method:   "POST",
+		Path:     path,
+		Handler:  handler,
 		IsSecure: secure,
 	}
 	router.Add(route)
@@ -45,13 +55,21 @@ func (router *AppRouter) POST(path string, secure bool, handler HandlerFunc) *Ro
 
 func (router *AppRouter) PUT(path string, secure bool, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:  "PUT",
-		Path:    path,
-		Handler: handler,
+		Method:   "PUT",
+		Path:     path,
+		Handler:  handler,
 		IsSecure: secure,
 	}
 	router.Add(route)
 	return route
+}
+
+func (router *AppRouter) Use(handler HandlerFunc) *AppRouter {
+	router.engine.Use(func(gc *gin.Context) {
+		context := RequestContext{Application: router.app}
+		handler(Request{gin: gc, Raw: gc.Request, Context: context}, Response{gin: gc})
+	})
+	return router
 }
 
 func (router *AppRouter) Add(r *Route) *AppRouter {
@@ -62,21 +80,28 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	if len(r.Paths) > 0 {
 		paths = append(paths, r.Paths[:]...)
 	}
+
+	handler := func(gc *gin.Context) {
+		if r.IsSecure && !securityFilter(gc) {
+			return
+		}
+		context := RequestContext{Application: router.app}
+		consumer := getKongConsumer(gc)
+		if consumer != nil {
+			context.HasTenant = true
+			context.Username = consumer.Username
+		} else {
+			context.HasTenant = false
+		}
+		r.Handler(Request{gin: gc, Context: context}, Response{gin: gc})
+	}
+
 	for _, path := range paths {
-		router.engine.Handle(r.Method, path, func(gc *gin.Context) {
-			if r.IsSecure && !securityFilter(gc) {
-				return
-			}
-			context := RequestContext{Application: router.app}
-			consumer := getKongConsumer(gc)
-			if consumer != nil {
-				context.HasTenant = true
-				context.Username = consumer.Username
-			} else {
-				context.HasTenant = false
-			}
-			r.Handler(Request{gin: gc, Context: context}, Response{gin: gc})
-		})
+		if r.Method == "*" {
+			router.engine.Any(path, handler)
+		} else {
+			router.engine.Handle(r.Method, path, handler)
+		}
 	}
 	return router
 }
@@ -97,6 +122,10 @@ func (r Response) OK(body interface{}) {
 
 func (r Response) JSON(status int, body interface{}) {
 	r.gin.JSON(status, body)
+}
+
+func (r Response) NotFound(message string) {
+	r.gin.JSON(404, H{"message": message})
 }
 
 func (r Response) BadRequest(body interface{}) {
@@ -141,6 +170,40 @@ func (r Response) Send(res interface{}, err error) error {
 // *********************************************************************************************************************
 // Request
 // *********************************************************************************************************************
+
+func (r *Request) Forward(upstream string, strip string, headers *map[string]string, headersBlackList []string) error {
+	u, err := url.Parse(upstream)
+	if err != nil {
+		return err
+	}
+
+	req := r.Raw
+	req.URL.Scheme = u.Scheme
+	req.URL.Host = u.Host
+	req.Header.Set("X-Forwarded-Host", req.Host)
+	req.Host = u.Host
+
+	if strip != "" {
+		path := strings.TrimPrefix(req.RequestURI, strip)
+		path = fmt.Sprintf("%s/%s", strings.TrimSuffix(u.Path, "/"), strings.TrimPrefix(path, "/"))
+		req.URL.Path = path
+	}
+	if headersBlackList != nil {
+		for _, key := range *headers {
+			delete(req.Header, key)
+		}
+	}
+	if headers != nil {
+		for key, value := range *headers {
+			req.Header.Add(key, value)
+		}
+	}
+	u.Path = ""
+	proxy := httputil.NewSingleHostReverseProxy(u)
+
+	proxy.ServeHTTP(r.gin.Writer, r.gin.Request)
+	return nil
+}
 
 func (r Request) Header(name string) string {
 	return r.gin.GetHeader(name)
@@ -191,16 +254,16 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 	return true
 }
 
-func (r Request) RequireBasicAuth() (Credentials, bool) {
+func (r Request) RequireBasicAuth() Credentials {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
 	if !hasAuth || IsStrEmpty(user) {
 		_ = Capture("http.request.unauthorized", fmt.Errorf(r.gin.Request.RequestURI))
 		r.gin.JSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
 		})
-		return Credentials{}, false
+		return Credentials{}
 	}
-	return Credentials{Username: user, Password: password}, true
+	return Credentials{Username: user, Password: password}
 }
 
 func (r Request) Param(name string) string {
@@ -233,7 +296,6 @@ func securityFilter(gc *gin.Context) bool {
 	}
 	return true
 }
-
 
 func getKongConsumer(ctx *gin.Context) *KongConsumerInfo {
 	id := ctx.GetHeader("X-Consumer-ID")
