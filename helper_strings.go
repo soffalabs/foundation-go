@@ -9,6 +9,7 @@ var (
 	 regexCleanPathInt = regexp.MustCompile(`/+`)
 	 regexCleanPath = regexp.MustCompile(`^/+|/+$`)
 )
+
 func IsStrEmpty(value string) bool {
 	return len(value) == 0
 }

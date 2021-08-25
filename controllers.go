@@ -14,6 +14,15 @@ type HTTPError struct {
 	Message string `json:"message"`
 }
 
+type HandlerFunc func(req Request, res Response)
+
+type CrudHandler interface {
+	Create(req Request, res Response)
+	Update(req Request, res Response)
+	Delete(req Request, res Response)
+	List(req Request, res Response)
+}
+
 const (
 	AuthenticationKey = "authentication"
 )
@@ -63,6 +72,16 @@ func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
 	return route
 }
 
+func (router *AppRouter) PATCH(path string, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:  "PATCH",
+		Path:    path,
+		Handler: handler,
+	}
+	router.Add(route)
+	return route
+}
+
 func (router *AppRouter) PUT(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "PUT",
@@ -73,10 +92,51 @@ func (router *AppRouter) PUT(path string, handler HandlerFunc) *Route {
 	return route
 }
 
+func (router *AppRouter) JwtAuth() *AppRouter {
+	router.jwtAuthRequired = true
+	return router
+}
+
+func (router *AppRouter) DELETE(path string, handler HandlerFunc) *Route {
+	route := &Route{
+		Method:  "DELETE",
+		Path:    path,
+		Handler: handler,
+	}
+	router.Add(route)
+	return route
+}
+
+type RouteOpts struct {
+	JwtAuth   bool
+	BasicAuth bool
+}
+
+func (router *AppRouter) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOpts) {
+	var routes []*Route
+	routes = append(routes, router.GET(base, handler.List))
+	routes = append(routes, router.POST(base, handler.Create))
+	routes = append(routes, router.DELETE(base, handler.Delete))
+	routes = append(routes, router.PATCH(fmt.Sprintf("%s/:id", base), handler.Update))
+	if opts != nil {
+		for _, r := range routes {
+			r.jwtAuthRequired = opts.JwtAuth
+			r.basicAuthRequired = opts.BasicAuth
+		}
+	}
+}
+
+func (router *AppRouter) CRUD(base string, handler CrudHandler) {
+	router.CRUDWithOptions(base, handler, nil)
+}
+
 func (router *AppRouter) Use(handler HandlerFunc) *AppRouter {
 	router.engine.Use(func(gc *gin.Context) {
 		context := RequestContext{Application: router.app}
-		handler(Request{gin: gc, Raw: gc.Request, Context: context}, Response{gin: gc})
+		handler(
+			Request{gin: gc, Raw: gc.Request, Context: context, App: context.Application},
+			Response{gin: gc},
+		)
 	})
 	return router
 }
@@ -91,59 +151,14 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	}
 
 	handler := func(gc *gin.Context) {
-		if r.basicAuthRequired {
-			user, password, hasAuth := gc.Request.BasicAuth()
-			if !hasAuth {
-				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
-				return
-			}
-			principal, err := router.authenticate(user, password)
-			if err != nil || principal == nil {
-				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
-				if err != nil {
-					log.Error(err)
-				}
-				return
-			}
-			gc.Set(AuthenticationKey, principal)
-		} else if r.jwtAuthRequired {
-			auth := gc.GetHeader("Authorization")
-			if auth == "" {
-				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
-				return
-			}
-			if !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
-				return
-			}
-			token := auth[len("bearer "):]
-			decoded, err := DecodeJwt(router.jwtSecret, token)
-			if err != nil {
-				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
-				if err != nil {
-					log.Error(err)
-				}
-				return
-			}
-			if decoded.Audience != router.audience {
-				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_AUDIENCE"})
-				return
-			}
-			gc.Set(AuthenticationKey, Authentication{
-				Username:  decoded.Subject,
-				Principal: decoded.Ext,
-			})
-
+		r.checkSecurityConstraints(router, gc)
+		if !gc.IsAborted() {
+			context := RequestContext{Application: router.app}
+			r.Handler(
+				Request{gin: gc, Raw: gc.Request, Context: context, App: context.Application},
+				Response{gin: gc},
+			)
 		}
-		context := RequestContext{Application: router.app}
-		consumer := getKongConsumer(gc)
-		if consumer != nil {
-			context.HasTenant = true
-			context.Username = consumer.Username
-		} else {
-			context.HasTenant = false
-		}
-		r.Handler(Request{gin: gc, Context: context}, Response{gin: gc})
 	}
 
 	for _, path := range paths {
@@ -154,6 +169,59 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 		}
 	}
 	return router
+}
+
+func (route *Route) checkSecurityConstraints(router *AppRouter, gc *gin.Context) {
+	if route.open {
+		return
+	}
+	if route.basicAuthRequired {
+		user, password, hasAuth := gc.Request.BasicAuth()
+		if !hasAuth {
+			gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+			return
+		}
+		principal, err := router.authenticate(user, password)
+		if err != nil || principal == nil {
+			gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
+			if err != nil {
+				log.Error(err)
+			}
+			return
+		}
+		gc.Set(AuthenticationKey, principal)
+		return
+	}
+
+	if route.jwtAuthRequired || router.jwtAuthRequired {
+		auth := gc.GetHeader("Authorization")
+		if auth == "" {
+			gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+			return
+		}
+		if !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+			gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+			return
+		}
+		token := auth[len("bearer "):]
+		decoded, err := DecodeJwt(router.jwtSecret, token)
+		if err != nil {
+			gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
+			if err != nil {
+				log.Error(err)
+			}
+			return
+		}
+		if decoded.Audience != router.audience {
+			gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_AUDIENCE"})
+			return
+		}
+		gc.Set(AuthenticationKey, Authentication{
+			Username:  decoded.Subject,
+			Principal: decoded.Ext,
+		})
+
+	}
 }
 
 func (route *Route) BasicAuth() *Route {
@@ -169,6 +237,12 @@ func (route *Route) JwtAuth() *Route {
 // *********************************************************************************************************************
 // Response
 // *********************************************************************************************************************
+
+func (r Response) TODO() {
+	r.gin.AbortWithStatusJSON(http.StatusNotImplemented, gin.H{
+		"message": "Work in progress",
+	})
+}
 
 func (r Response) Writer() http.ResponseWriter {
 	return r.gin.Writer
@@ -227,7 +301,7 @@ func (r Response) Send(res interface{}, err error) {
 // Request
 // *********************************************************************************************************************
 
-func (r *Request) SetHeaders(headers map[string]string)  {
+func (r *Request) SetHeaders(headers map[string]string) {
 	if headers != nil {
 		for key, value := range headers {
 			r.Raw.Header.Set(key, value)
@@ -292,6 +366,10 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 	return true
 }
 
+func (r Request) IsAborted() bool {
+	return r.gin.IsAborted()
+}
+
 func (r Request) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
 	if !hasAuth || IsStrEmpty(user) {
@@ -320,31 +398,4 @@ func (r Request) RequireParam(name string) string {
 		})
 	}
 	return value
-}
-
-func securityFilter(gc *gin.Context) bool {
-	h := gc.GetHeader("X-Anonymous-Consumer")
-	if "true" == strings.ToLower(h) {
-		message := "Access to this resource is forbidden, please check your apiKey."
-		_ = Capture(fmt.Sprintf("http.guest.access.forbidden:%s", gc.Request.RequestURI), fmt.Errorf(message))
-		gc.AbortWithStatusJSON(403, H{
-			"message": message,
-		})
-		return false
-	}
-	return true
-}
-
-func getKongConsumer(ctx *gin.Context) *KongConsumerInfo {
-	id := ctx.GetHeader("X-Consumer-ID")
-	if IsStrEmpty(id) {
-		return nil
-	}
-	return &KongConsumerInfo{
-		Id:                   id,
-		CustomId:             ctx.GetHeader("X-Consumer-Custom-ID"),
-		Username:             ctx.GetHeader("X-Consumer-Username"),
-		CredentialIdentifier: ctx.GetHeader("X-Credential-Identifier"),
-		Anonymous:            ctx.GetHeader("X-Anonymous-Consumer") == "true",
-	}
 }

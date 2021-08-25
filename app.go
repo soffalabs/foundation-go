@@ -2,10 +2,12 @@ package sf
 
 import (
 	"fmt"
+	"github.com/gavv/httpexpect/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
 	"net"
@@ -13,15 +15,18 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"testing"
+	"time"
 )
 
 type AppRouter struct {
-	engine       *gin.Engine
-	app          *Application
-	routes       []Route
-	authenticate Authenticator
-	jwtSecret    string
-	audience    string
+	engine          *gin.Engine
+	app             *Application
+	routes          []Route
+	authenticate    Authenticator
+	jwtAuthRequired bool
+	jwtSecret       string
+	audience        string
 }
 
 type Route struct {
@@ -31,9 +36,17 @@ type Route struct {
 	Handler           HandlerFunc
 	basicAuthRequired bool
 	jwtAuthRequired   bool
+	open              bool
 }
 
 type Authenticator = func(string, string) (*Authentication, error)
+
+type AppTest struct {
+	App    *Application
+	server *httptest.Server
+	test   *testing.T
+	expect *httpexpect.Expect
+}
 
 type Props struct {
 	Name        string
@@ -44,8 +57,6 @@ type Props struct {
 
 type RequestContext struct {
 	Application *Application
-	TenantId    string
-	HasTenant   bool
 	Username    string
 }
 
@@ -53,6 +64,7 @@ type Request struct {
 	gin     *gin.Context
 	Raw     *http.Request
 	Context RequestContext
+	App     *Application
 }
 
 type Validations struct {
@@ -67,8 +79,6 @@ type RouterConfig struct {
 	Secure bool
 }
 
-type HandlerFunc func(req Request, res Response)
-
 type Application struct {
 	Name        string
 	Description string
@@ -77,15 +87,13 @@ type Application struct {
 	OnReady     func()
 
 	// @private
-	conf         ConfManager
-	routes       []Route
-	router       *AppRouter
-	healthChecks []ServiceCheck
-	// globals          map[string]interface{}
-	//startupListeners []func()
+	conf           ConfManager
+	routes         []Route
+	router         *AppRouter
+	healthChecks   []ServiceCheck
 	messageBroker  *MessageBroker
-	dataSources    []*DataSource
-	dataSourcesMap map[string]DataSource
+	dataSources    []EntityManager
+	dataSourcesMap map[string]EntityManager
 }
 
 type ServiceCheck struct {
@@ -101,7 +109,8 @@ func (app *Application) Init(env string) {
 
 	app.healthChecks = []ServiceCheck{}
 	app.conf = newConfManager(env)
-	app.dataSources = []*DataSource{}
+	app.dataSources = []EntityManager{}
+	app.dataSourcesMap = map[string]EntityManager{}
 
 	{
 		// router
@@ -115,6 +124,7 @@ func (app *Application) Init(env string) {
 			Method:  "GET",
 			Paths:   []string{"/status", "/healthz"},
 			Handler: app.handleHealthCheck,
+			open:    true,
 		})
 		app.router = router
 	}
@@ -150,12 +160,12 @@ func (app *Application) AddHealthCheck(name string, kind string, ping func() err
 	})
 }
 
-func (app *Application) AddDataSource(name string, url string, migrations []*gormigrate.Migration) *DataSource {
-	return app.AddMultitenanDataSource(name, url, migrations, nil)
+func (app *Application) AddDataSource(name string, url string, migrations []*gormigrate.Migration) *EntityManager {
+	return app.AddDataSourceExt(name, url, migrations, nil)
 }
 
-func (app *Application) AddMultitenanDataSource(name string, url string, migrations []*gormigrate.Migration, loader func() ([]string, error)) *DataSource {
-	ds := &DataSource{
+func (app *Application) AddDataSourceExt(name string, url string, migrations []*gormigrate.Migration, loader func() ([]string, error)) *EntityManager {
+	ds := EntityManager{
 		ServiceName:   strings.TrimPrefix(app.Name, "bantu-"),
 		Name:          name,
 		Url:           url,
@@ -164,7 +174,9 @@ func (app *Application) AddMultitenanDataSource(name string, url string, migrati
 	}
 	log.FatalErr(ds.bootstrap())
 	app.dataSources = append(app.dataSources, ds)
-	return ds
+
+	app.dataSourcesMap[name] = ds
+	return &ds
 }
 
 func (app Application) GetBroker() MessageBroker {
@@ -182,22 +194,25 @@ func (app Application) Conf(name string, env string, required bool) string {
 	return value
 }
 
-func (app *Application) GetDataSource() DataSource {
+func (app *Application) GetDataSource() EntityManager {
 	if app.dataSources == nil || len(app.dataSources) == 0 {
 		panic("No datasource defined")
 	}
 	if len(app.dataSources) > 1 {
 		panic("More than 1 datasoure was registerd, use named datasource instead")
 	}
-	return *app.dataSources[0]
+	return app.dataSources[0]
 }
 
 func (app Application) Router() *AppRouter {
 	return app.router
 }
 
-func (app *Application) GetNamedDataSource(name string) DataSource {
+func (app *Application) GetNamedDataSource(name string) EntityManager {
 	return app.dataSourcesMap[strings.ToLower(name)]
+}
+func (app *Application) GetPrimaryDataSource() EntityManager {
+	return app.dataSourcesMap["primary"]
 }
 
 func (app *Application) getHealthCheck() (bool, []HealthCheck) {
@@ -282,12 +297,9 @@ func (app *Application) ApplyDatabaseMigrations() error {
 	if app.dataSources == nil {
 		return nil
 	}
-	app.dataSourcesMap = map[string]DataSource{}
 	for _, ds := range app.dataSources {
-		if err := ds.Migrate(nil); err != nil {
-			return err
-		}
-		app.dataSourcesMap[strings.ToLower(ds.Name)] = *ds
+		err := ds.Migrate(nil)
+		log.FatalErr(err)
 	}
 	return nil
 }
@@ -383,8 +395,167 @@ func (app *Application) createDbCommand() *cobra.Command {
 	return cmd
 }
 
-func (app *Application) NewTestServer() *httptest.Server {
-	//app.createRouter()
+func (app *Application) CreateTestHelper(t *testing.T) AppTest {
+	app.Init("test")
+	assert.Nil(t, app.ApplyDatabaseMigrations())
+	time.Sleep(200 * time.Millisecond)
 	app.invokeStartupListeners()
-	return httptest.NewServer(app.router.engine)
+	server := httptest.NewServer(app.router.engine)
+	return AppTest{
+		App:    app,
+		test:   t,
+		expect: httpexpect.New(t, server.URL),
+		server: server,
+	}
+
+}
+
+func (t *AppTest) Close() {
+	t.server.Close()
+}
+
+func (t *AppTest) Truncate(dsName string, names []string) {
+	ds := t.App.GetNamedDataSource(dsName)
+	for _, name := range names {
+		tableName := fmt.Sprintf("%s_%s", ds.ServiceName, name)
+		_ = ds.Exec("DELETE FROM " + tableName)
+	}
+}
+
+func (t *AppTest) GET(path string) TestRequest {
+	return TestRequest{
+		request: t.expect.GET(path),
+	}
+}
+
+func (t *AppTest) POST(path string, data interface{}) TestRequest {
+	return TestRequest{
+		request: t.expect.POST(path).WithJSON(data),
+	}
+}
+
+func (t *AppTest) PUT(path string, data interface{}) TestRequest {
+	return TestRequest{
+		request: t.expect.PUT(path).WithJSON(data),
+	}
+}
+
+func (t *AppTest) DELETE(path string, data interface{}) TestRequest {
+	return TestRequest{
+		request: t.expect.DELETE(path).WithJSON(data),
+	}
+}
+
+func (t *AppTest) PATCH(path string, data interface{}) TestRequest {
+	return TestRequest{
+		request: t.expect.PATCH(path).WithJSON(data),
+	}
+}
+
+func (t TestRequest) Expect() TestResponse {
+	return TestResponse{
+		response: t.request.Expect(),
+	}
+}
+
+func (t TestRequest) Bearer(token string) TestRequest {
+	t.request.WithHeader("Authorization", fmt.Sprintf("Bearer %s", token))
+	return t
+}
+
+func (t TestRequest) BasicAuth(user string, password string) TestRequest {
+	t.request.WithBasicAuth(user, password)
+	return t
+}
+
+type TestRequest struct {
+	request *httpexpect.Request
+}
+
+type TestResponse struct {
+	response *httpexpect.Response
+}
+
+type TestResult struct {
+	value *httpexpect.Value
+}
+
+func (t TestResponse) OK() TestResponse {
+	t.response.Status(http.StatusOK)
+	return t
+}
+
+func (t TestResponse) Unauthorized() TestResponse {
+	t.response.Status(http.StatusUnauthorized)
+	return t
+}
+
+func (t TestResponse) BadRequest() TestResponse {
+	t.response.Status(http.StatusBadRequest)
+	return t
+}
+
+func (t TestResponse) Forbidden() TestResponse {
+	t.response.Status(http.StatusForbidden)
+	return t
+}
+
+func (t TestResponse) Status(status int) TestResponse {
+	t.response.Status(status)
+	return t
+}
+
+func (t TestResponse) Json(path string) TestResult {
+	return TestResult{
+		value: t.response.JSON().Path(path),
+	}
+}
+
+func (t TestResult) Is(value interface{}) TestResult {
+	t.value.Equal(value)
+	return t
+}
+
+func (t TestResult) Contains(value string) TestResult {
+	t.value.String().Contains(value)
+	return t
+}
+
+func (t TestResult) NotContains(value string) TestResult {
+	t.value.String().NotContains(value)
+	return t
+}
+
+func (t TestResult) IsArray() TestResult {
+	t.value.Array()
+	return t
+}
+
+func (t TestResult) IsEmptyArray() TestResult {
+	t.value.Array().Empty()
+	return t
+}
+
+func (t TestResult) IsNonEmptyArray() TestResult {
+	t.value.Array().NotEmpty()
+	return t
+}
+
+func (t TestResult) String() string {
+	return t.value.String().Raw()
+}
+
+func (t TestResult) NotEmpty() TestResult {
+	t.value.String().NotEmpty()
+	return t
+}
+
+func (t TestResult) IsTrue() TestResult {
+	t.value.Boolean().True()
+	return t
+}
+
+func (t TestResult) Equal(value interface{}) TestResult {
+	t.value.Equal(value)
+	return t
 }

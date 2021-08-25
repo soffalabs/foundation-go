@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef
+	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/gin-gonic/gin v1.7.3
 	github.com/go-gormigrate/gormigrate/v2 v2.0.0
 	github.com/go-resty/resty/v2 v2.6.0
