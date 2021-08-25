@@ -5,8 +5,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/soffa-io/soffa-core-go/log"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"regexp"
 	"strings"
 )
@@ -172,6 +170,9 @@ func (route *Route) JwtAuth() *Route {
 // Response
 // *********************************************************************************************************************
 
+func (r Response) Writer() http.ResponseWriter {
+	return r.gin.Writer
+}
 func (r Response) OK(body interface{}) {
 	r.gin.JSON(http.StatusOK, body)
 }
@@ -226,38 +227,20 @@ func (r Response) Send(res interface{}, err error) {
 // Request
 // *********************************************************************************************************************
 
-func (r *Request) Forward(upstream string, strip string, headers map[string]string, headersBlackList []string) error {
-	u, err := url.Parse(upstream)
-	if err != nil {
-		return err
-	}
-
-	req := r.Raw
-	req.URL.Scheme = u.Scheme
-	req.URL.Host = u.Host
-	req.Header.Set("X-Forwarded-Host", req.Host)
-	req.Host = u.Host
-
-	if strip != "" {
-		path := strings.TrimPrefix(req.RequestURI, strip)
-		path = fmt.Sprintf("%s/%s", strings.TrimSuffix(u.Path, "/"), strings.TrimPrefix(path, "/"))
-		req.URL.Path = path
-	}
-	if headersBlackList != nil {
-		for _, key := range headers {
-			delete(req.Header, key)
-		}
-	}
+func (r *Request) SetHeaders(headers map[string]string)  {
 	if headers != nil {
 		for key, value := range headers {
-			req.Header.Set(key, value)
+			r.Raw.Header.Set(key, value)
 		}
 	}
-	u.Path = ""
-	proxy := httputil.NewSingleHostReverseProxy(u)
+}
 
-	proxy.ServeHTTP(r.gin.Writer, r.gin.Request)
-	return nil
+func (r *Request) DelHeaders(headers ...string) {
+	if headers != nil {
+		for _, key := range headers {
+			r.Raw.Header.Del(key)
+		}
+	}
 }
 
 func (r Request) Header(name string) string {
