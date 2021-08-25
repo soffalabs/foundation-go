@@ -17,5 +17,5 @@ jobs:
       - name: Run tests
         run: |
           go get .
-          go test test/.
+          go test test/*
 
