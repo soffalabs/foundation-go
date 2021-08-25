@@ -1,7 +1,6 @@
-package soffa_core
+package sf
 
 import (
-	"encoding/json"
 	"fmt"
 	evbus "github.com/asaskevich/EventBus"
 	"github.com/soffa-io/soffa-core-go/log"
@@ -161,16 +160,12 @@ func (b *RabbitMQ) Listen(queueName string, exchange string, routingKeys []strin
 
 // =========================================================================================================
 
-func prepareMessage(event string, payload interface{}) ([]byte, error) {
-	data, err := EncodeMessage(payload)
-	if err != nil {
-		return nil, err
-	}
+func prepareMessage(event string, data interface{}) ([]byte, error) {
 	message := Message{
 		Event:   event,
 		Payload: data,
 	}
-	return EncodeMessage(message)
+	return ToJson(message)
 }
 
 func handleBrokerMessage(body []byte, handler MessageHandler) bool {
@@ -186,22 +181,14 @@ func handleBrokerMessage(body []byte, handler MessageHandler) bool {
 	return true
 }
 
-func EncodeMessage(message interface{}) ([]byte, error) {
-	data, err := json.Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
 func DecodeMessage(body []byte) (*Message, error) {
 	if log.IsDebugEnabled() {
-		log.Debug("[amqp.controllers] -- %s", body)
+		log.Debugf("[message.inbound] -- %s", body)
 	}
 
 	var message *Message
-	if err := json.Unmarshal(body, &message); err != nil {
-		log.Error("Invalid RabbitMQ payload received\n%v", body)
+	if err := FromJson(body, &message); err != nil {
+		log.Errorf("Invalid message payload received\n%s", body)
 		return nil, err
 	}
 	if IsStrEmpty(message.Event) {

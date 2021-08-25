@@ -1,4 +1,4 @@
-package soffa_core
+package sf
 
 import (
 	"regexp"

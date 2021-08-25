@@ -57,16 +57,5 @@ func IsDebugEnabled() bool {
 
 func init() {
 	logrus.SetOutput(os.Stdout)
-	logLevel := os.Getenv("LOG_LEVEL")
-	if logLevel == "TRACE" {
-		logrus.SetLevel(logrus.TraceLevel)
-	} else if logLevel == "DEBUG" {
-		logrus.SetLevel(logrus.DebugLevel)
-	} else if logLevel == "WARN" {
-		logrus.SetLevel(logrus.WarnLevel)
-	} else if logLevel == "ERROR" {
-		logrus.SetLevel(logrus.ErrorLevel)
-	} else {
-		logrus.SetLevel(logrus.InfoLevel)
-	}
+
 }

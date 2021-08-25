@@ -1,10 +1,11 @@
-package soffa_core
+package sf
 
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/jeremywohl/flatten"
 	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
 	"github.com/soffa-io/soffa-core-go/log"
 	"os"
 	"strings"
@@ -23,6 +24,23 @@ func newConfManager(env string) ConfManager {
 		if err := godotenv.Load(f); err == nil {
 			log.Infof("%s file loaded", f)
 		}
+	}
+
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "INFO"
+	}
+	logrus.Infof("LOG_LEVEL is %s", logLevel)
+	if logLevel == "TRACE" {
+		logrus.SetLevel(logrus.TraceLevel)
+	} else if logLevel == "DEBUG" {
+		logrus.SetLevel(logrus.DebugLevel)
+	} else if logLevel == "WARN" {
+		logrus.SetLevel(logrus.WarnLevel)
+	} else if logLevel == "ERROR" {
+		logrus.SetLevel(logrus.ErrorLevel)
+	} else {
+		logrus.SetLevel(logrus.InfoLevel)
 	}
 
 	conf := ConfManager{

@@ -1,10 +1,10 @@
-package soffa_core
+package sf
 
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/soffa-io/soffa-core-go/log"
 	"net/http"
-	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
 	"regexp"
@@ -16,49 +16,60 @@ type HTTPError struct {
 	Message string `json:"message"`
 }
 
+const (
+	AuthenticationKey = "authentication"
+)
+
 // *********************************************************************************************************************
 // Router
 // *********************************************************************************************************************
 
-func (router *AppRouter) Any(path string, secure bool, handler HandlerFunc) *Route {
+func (router *AppRouter) SetAuthenticator(validator Authenticator) *AppRouter {
+	router.authenticate = validator
+	return router
+}
+
+func (router *AppRouter) SetJwtSettings(secret string, audience string) *AppRouter {
+	router.jwtSecret = secret
+	router.audience = audience
+	return router
+}
+
+func (router *AppRouter) Any(path string, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:   "*",
-		Path:     path,
-		Handler:  handler,
-		IsSecure: secure,
+		Method:  "*",
+		Path:    path,
+		Handler: handler,
 	}
 	router.Add(route)
 	return route
 }
 
-func (router *AppRouter) GET(path string, secure bool, handler HandlerFunc) *Route {
+func (router *AppRouter) GET(path string, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:   "GET",
-		Path:     path,
-		Handler:  handler,
-		IsSecure: secure,
+		Method:  "GET",
+		Path:    path,
+		Handler: handler,
 	}
 	router.Add(route)
 	return route
 }
 
-func (router *AppRouter) POST(path string, secure bool, handler HandlerFunc) *Route {
+func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:   "POST",
-		Path:     path,
-		Handler:  handler,
-		IsSecure: secure,
+		Method:  "POST",
+		Path:    path,
+		Handler: handler,
 	}
 	router.Add(route)
 	return route
 }
 
-func (router *AppRouter) PUT(path string, secure bool, handler HandlerFunc) *Route {
+func (router *AppRouter) PUT(path string, handler HandlerFunc) *Route {
 	route := &Route{
-		Method:   "PUT",
-		Path:     path,
-		Handler:  handler,
-		IsSecure: secure,
+		Method:  "PUT",
+		Path:    path,
+		Handler: handler,
 	}
 	router.Add(route)
 	return route
@@ -82,8 +93,49 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	}
 
 	handler := func(gc *gin.Context) {
-		if r.IsSecure && !securityFilter(gc) {
-			return
+		if r.basicAuthRequired {
+			user, password, hasAuth := gc.Request.BasicAuth()
+			if !hasAuth {
+				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+				return
+			}
+			principal, err := router.authenticate(user, password)
+			if err != nil || principal == nil {
+				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
+				if err != nil {
+					log.Error(err)
+				}
+				return
+			}
+			gc.Set(AuthenticationKey, principal)
+		} else if r.jwtAuthRequired {
+			auth := gc.GetHeader("Authorization")
+			if auth == "" {
+				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+				return
+			}
+			if !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+				gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
+				return
+			}
+			token := auth[len("bearer "):]
+			decoded, err := DecodeJwt(router.jwtSecret, token)
+			if err != nil {
+				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
+				if err != nil {
+					log.Error(err)
+				}
+				return
+			}
+			if decoded.Audience != router.audience {
+				gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_AUDIENCE"})
+				return
+			}
+			gc.Set(AuthenticationKey, Authentication{
+				Username:  decoded.Subject,
+				Principal: decoded.Ext,
+			})
+
 		}
 		context := RequestContext{Application: router.app}
 		consumer := getKongConsumer(gc)
@@ -106,10 +158,14 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	return router
 }
 
-func (app *Application) NewTestServer() *httptest.Server {
-	//app.createRouter()
-	app.invokeStartupListeners()
-	return httptest.NewServer(app.router.engine)
+func (route *Route) BasicAuth() *Route {
+	route.basicAuthRequired = true
+	return route
+}
+
+func (route *Route) JwtAuth() *Route {
+	route.jwtAuthRequired = true
+	return route
 }
 
 // *********************************************************************************************************************
@@ -138,7 +194,7 @@ func (r Response) Forbidden(message string) {
 	})
 }
 
-func (r Response) Send(res interface{}, err error) error {
+func (r Response) Send(res interface{}, err error) {
 	if err != nil {
 		switch t := err.(type) {
 		default:
@@ -164,14 +220,13 @@ func (r Response) Send(res interface{}, err error) error {
 	} else {
 		r.OK(res)
 	}
-	return err
 }
 
 // *********************************************************************************************************************
 // Request
 // *********************************************************************************************************************
 
-func (r *Request) Forward(upstream string, strip string, headers *map[string]string, headersBlackList []string) error {
+func (r *Request) Forward(upstream string, strip string, headers map[string]string, headersBlackList []string) error {
 	u, err := url.Parse(upstream)
 	if err != nil {
 		return err
@@ -189,13 +244,13 @@ func (r *Request) Forward(upstream string, strip string, headers *map[string]str
 		req.URL.Path = path
 	}
 	if headersBlackList != nil {
-		for _, key := range *headers {
+		for _, key := range headers {
 			delete(req.Header, key)
 		}
 	}
 	if headers != nil {
-		for key, value := range *headers {
-			req.Header.Add(key, value)
+		for key, value := range headers {
+			req.Header.Set(key, value)
 		}
 	}
 	u.Path = ""
@@ -254,16 +309,16 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 	return true
 }
 
-func (r Request) RequireBasicAuth() Credentials {
+func (r Request) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
 	if !hasAuth || IsStrEmpty(user) {
 		_ = Capture("http.request.unauthorized", fmt.Errorf(r.gin.Request.RequestURI))
-		r.gin.JSON(http.StatusUnauthorized, gin.H{
+		r.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
 		})
-		return Credentials{}
+		return nil
 	}
-	return Credentials{Username: user, Password: password}
+	return &Credentials{Username: user, Password: password}
 }
 
 func (r Request) Param(name string) string {

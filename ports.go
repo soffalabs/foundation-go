@@ -1,4 +1,4 @@
-package soffa_core
+package sf
 
 import (
 	"github.com/soffa-io/soffa-core-go/log"

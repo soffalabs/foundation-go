@@ -1,4 +1,4 @@
-package soffa_core
+package sf
 
 import (
 	"fmt"
@@ -8,25 +8,32 @@ import (
 	"github.com/spf13/cobra"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 )
 
 type AppRouter struct {
-	engine *gin.Engine
-	app    *Application
-	routes []Route
+	engine       *gin.Engine
+	app          *Application
+	routes       []Route
+	authenticate Authenticator
+	jwtSecret    string
+	audience    string
 }
 
 type Route struct {
-	Method    string
-	Path      string
-	Paths     []string
-	IsSecure  bool
-	HasTenant bool
-	Handler   HandlerFunc
+	Method            string
+	Path              string
+	Paths             []string
+	Handler           HandlerFunc
+	basicAuthRequired bool
+	jwtAuthRequired   bool
 }
+
+type Authenticator = func(string, string) (*Authentication, error)
 
 type Props struct {
 	Name        string
@@ -76,8 +83,9 @@ type Application struct {
 	healthChecks []ServiceCheck
 	// globals          map[string]interface{}
 	//startupListeners []func()
-	messageBroker *MessageBroker
-	dataSources   []*DataSource
+	messageBroker  *MessageBroker
+	dataSources    []*DataSource
+	dataSourcesMap map[string]DataSource
 }
 
 type ServiceCheck struct {
@@ -104,10 +112,9 @@ func (app *Application) Init(env string) {
 			app:    app,
 		}
 		router.Add(&Route{
-			Method:   "GET",
-			Paths:    []string{"/status", "/healthz"},
-			IsSecure: false,
-			Handler:  app.handleHealthCheck,
+			Method:  "GET",
+			Paths:   []string{"/status", "/healthz"},
+			Handler: app.handleHealthCheck,
 		})
 		app.router = router
 	}
@@ -189,16 +196,8 @@ func (app Application) Router() *AppRouter {
 	return app.router
 }
 
-func (app *Application) GetNamedDataSource(name string) (DataSource, error) {
-	if app.dataSources == nil || len(app.dataSources) == 0 {
-		return DataSource{}, fmt.Errorf("no datasource declared")
-	}
-	for _, ds := range app.dataSources {
-		if strings.ToLower(ds.Name) == strings.ToLower(name) {
-			return *ds, nil
-		}
-	}
-	return DataSource{}, fmt.Errorf("no datasource found with name: %s", name)
+func (app *Application) GetNamedDataSource(name string) DataSource {
+	return app.dataSourcesMap[strings.ToLower(name)]
 }
 
 func (app *Application) getHealthCheck() (bool, []HealthCheck) {
@@ -283,10 +282,12 @@ func (app *Application) ApplyDatabaseMigrations() error {
 	if app.dataSources == nil {
 		return nil
 	}
+	app.dataSourcesMap = map[string]DataSource{}
 	for _, ds := range app.dataSources {
 		if err := ds.Migrate(nil); err != nil {
 			return err
 		}
+		app.dataSourcesMap[strings.ToLower(ds.Name)] = *ds
 	}
 	return nil
 }
@@ -303,7 +304,18 @@ func (app *Application) invokeStartupListeners() {
 func (app *Application) Start(port int) {
 	app.printHealthCheck()
 	app.invokeStartupListeners()
+	if port == 0 {
+		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+		Fatal(err)
+		l, err := net.ListenTCP("tcp", addr)
+		Fatal(err)
+		defer func(l *net.TCPListener) {
+			_ = l.Close()
+		}(l)
+		port = l.Addr().(*net.TCPAddr).Port
+	}
 	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
+
 }
 
 func (app Application) Execute() {
@@ -320,6 +332,7 @@ func (app Application) Execute() {
 
 func (app *Application) createServerCmd() *cobra.Command {
 	var port int
+	var randomPort bool
 	var dbMigrations bool
 	var envName string
 
@@ -335,11 +348,16 @@ func (app *Application) createServerCmd() *cobra.Command {
 			} else {
 				log.Info("database migrations were skipped")
 			}
-			app.Start(port)
+			if randomPort {
+				app.Start(0)
+			} else {
+				app.Start(port)
+			}
 		},
 	}
 	cmd.Flags().StringVarP(&envName, "env", "e", os.Getenv("ENV"), "active environment profile")
 	cmd.Flags().IntVarP(&port, "port", "p", Getenvi("PORT", 8080), "server port")
+	cmd.Flags().BoolVarP(&randomPort, "random-port", "r", false, "start the server on a random available port")
 	cmd.Flags().BoolVarP(&dbMigrations, "db-migrations", "m", Getenvb("DB_MIGRATIONS", true), "apply database migrations")
 
 	return cmd
@@ -363,4 +381,10 @@ func (app *Application) createDbCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&envName, "env", "e", Getenv(os.Getenv("ENV"), "dev", true), "active environment profile")
 
 	return cmd
+}
+
+func (app *Application) NewTestServer() *httptest.Server {
+	//app.createRouter()
+	app.invokeStartupListeners()
+	return httptest.NewServer(app.router.engine)
 }

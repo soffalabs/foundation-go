@@ -1,4 +1,4 @@
-package soffa_core
+package sf
 
 import "github.com/soffa-io/soffa-core-go/log"
 
@@ -62,7 +62,7 @@ func Capture(operation string, err error) error {
 			message.Message = err.Error()
 		}
 
-		log.Errorf("[[ capture ]]: %s | %s", operation, ToJsonStrSafe(message))
+		log.Errorf("[capture]: %s | %s", operation, ToJsonStrSafe(message))
 	}
 	return err
 }

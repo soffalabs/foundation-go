@@ -1,4 +1,4 @@
-package soffa_core
+package sf
 
 import "fmt"
 
@@ -10,8 +10,9 @@ type HealthCheck struct {
 }
 
 type Message struct {
-	Event   string `json:"event"`
-	Payload []byte `json:"payload,omitempty"`
+	Event   string                  `json:"event"`
+	Payload interface{}             `json:"payload,omitempty"`
+	Reply   func(interface{}) error `json:"-"`
 }
 
 // H is a shortcut for map[string]interface{}
@@ -38,12 +39,12 @@ func Errf(format string, args ...interface{}) R {
 	return R{Error: fmt.Errorf(format, args...)}
 }
 
-func (hc HealthCheck) get(err error)  HealthCheck{
+func (hc HealthCheck) get(err error) HealthCheck {
 	if err != nil {
 		hc.Status = "DOWN"
 		msg := err.Error()
 		hc.Message = &msg
-	}else {
+	} else {
 		hc.Status = "UP"
 	}
 	return hc
