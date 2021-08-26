@@ -6,6 +6,7 @@ import (
 	"github.com/jeremywohl/flatten"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	"github.com/soffa-io/soffa-core-go/commons"
 	"github.com/soffa-io/soffa-core-go/log"
 	"os"
 	"strings"
@@ -48,7 +49,7 @@ func newConfManager(env string) ConfManager {
 		VaultUrl:   os.Getenv("VAULT_URL"),
 	}
 
-	if !IsStrEmpty(conf.VaultUrl) {
+	if !commons.IsStrEmpty(conf.VaultUrl) {
 		log.Infof("Loading config from vault: %s", conf.VaultUrl)
 		data, err := ReadVaultSecret(conf.VaultUrl)
 		if err != nil {
@@ -82,10 +83,10 @@ func (c ConfManager) Get(paths ...string) string {
 				value = fmt.Sprintf("%s", res)
 			}
 		}
-		if IsStrEmpty(value) {
+		if commons.IsStrEmpty(value) {
 			value = os.Getenv(p)
 		}
-		if !IsStrEmpty(value) {
+		if !commons.IsStrEmpty(value) {
 			return value
 		}
 	}

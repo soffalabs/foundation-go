@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/go-gormigrate/gormigrate/v2"
+	"github.com/soffa-io/soffa-core-go/commons"
 	"github.com/soffa-io/soffa-core-go/log"
+	"github.com/soffa-io/soffa-core-go/rpc"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	swaggerFiles "github.com/swaggo/files"
@@ -20,8 +21,9 @@ import (
 )
 
 type AppRouter struct {
-	engine          *gin.Engine
-	app             *Application
+	engine     *gin.Engine
+	App        *Application
+	appContext *ApplicationContext
 	routes          []Route
 	authenticate    Authenticator
 	jwtAuthRequired bool
@@ -55,16 +57,11 @@ type Props struct {
 	Description string
 }
 
-type RequestContext struct {
-	Application *Application
-	Username    string
-}
-
 type Request struct {
 	gin     *gin.Context
 	Raw     *http.Request
-	Context RequestContext
-	App     *Application
+	Context *ApplicationContext
+	//Auth    *Authentication
 }
 
 type Validations struct {
@@ -80,11 +77,15 @@ type RouterConfig struct {
 }
 
 type Application struct {
-	Name        string
-	Description string
-	Version     string
-	Configure   func(app *Application)
-	OnReady     func()
+	Name         string
+	Description  string
+	Version      string
+	Configure    func(app *ApplicationContext)
+	DataSources  func(app *ApplicationContext) []*DbLink
+	OnReady      func()
+	Broker       func(app *ApplicationContext) BrokerInfo
+	RpcClient       func(app *ApplicationContext) rpc.Client
+	CreateRouter func(router *AppRouter)
 
 	// @private
 	conf           ConfManager
@@ -92,8 +93,14 @@ type Application struct {
 	router         *AppRouter
 	healthChecks   []ServiceCheck
 	messageBroker  *MessageBroker
-	dataSources    []EntityManager
-	dataSourcesMap map[string]EntityManager
+	dataSources    []*DbLink
+	dataSourcesMap map[string]*DbLink
+	args           map[string]interface{}
+}
+
+type ApplicationContext struct {
+	app  *Application
+	Name string
 }
 
 type ServiceCheck struct {
@@ -105,20 +112,62 @@ type ServiceCheck struct {
 // *********************************************************************************************************************
 // *********************************************************************************************************************
 
+/*
+func Inject(function interface{}) error {
+	return DI.Invoke(function)
+}
+
+func RegisterBean(constructor interface{}) {
+	log.FatalErr(DI.Provide(constructor))
+}*/
+
 func (app *Application) Init(env string) {
 
 	app.healthChecks = []ServiceCheck{}
 	app.conf = newConfManager(env)
-	app.dataSources = []EntityManager{}
-	app.dataSourcesMap = map[string]EntityManager{}
+	app.dataSources = []*DbLink{}
+	app.dataSourcesMap = map[string]*DbLink{}
+	app.args = map[string]interface{}{}
+
+	context := &ApplicationContext{
+		app: app,
+		Name: app.Name,
+	}
+
+	if app.DataSources != nil {
+		ds := app.DataSources(context)
+		if ds != nil {
+			for _, item := range ds {
+				err := item.bootstrap()
+				log.FatalErr(err)
+				app.dataSources = append(app.dataSources, item)
+				app.dataSourcesMap[item.Name] = item
+			}
+		}
+	}
+
+	if app.Broker != nil {
+		//brokerUrl := inbound.Conf("amqp.url", "AMQP_URL", true)
+		info := app.Broker(context)
+		impl, err := newMessageBroker(context, info.Url)
+		log.FatalErr(err)
+		impl.Listen( info.Queue, info.Exchange, []string{info.Queue}, info.Handler)
+		app.messageBroker = &MessageBroker{
+			broker:   impl,
+			queue:    info.Queue,
+			exchange: info.Exchange,
+		}
+	}
 
 	{
 		// router
 		r := gin.Default()
 		r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
 		router := &AppRouter{
-			engine: r,
-			app:    app,
+			engine:     r,
+			App:        app,
+			appContext: context,
+			jwtSecret:  os.Getenv("JWT_SECRET"),
 		}
 		router.Add(&Route{
 			Method:  "GET",
@@ -129,7 +178,13 @@ func (app *Application) Init(env string) {
 		app.router = router
 	}
 
-	app.Configure(app)
+	if app.CreateRouter != nil {
+		app.CreateRouter(app.router)
+	}
+
+	if app.Configure != nil {
+		app.Configure(context)
+	}
 }
 
 func (app *Application) IsTestEnv() bool {
@@ -140,16 +195,11 @@ func (app *Application) IsProd() bool {
 	return app.conf.IsProd()
 }
 
-func (app *Application) UseBroker(url string, queueName string, exchange string, handler MessageHandler) MessageBroker {
-	impl, err := newMessageBroker(url)
-	log.FatalErr(err)
-	impl.Listen(queueName, exchange, []string{queueName}, handler)
-	app.messageBroker = &MessageBroker{
-		broker:   impl,
-		queue:    app.Name,
-		exchange: exchange,
-	}
-	return *app.messageBroker
+type BrokerInfo struct {
+	Url      string
+	Queue    string
+	Exchange string
+	Handler  MessageHandler
 }
 
 func (app *Application) AddHealthCheck(name string, kind string, ping func() error) {
@@ -160,23 +210,15 @@ func (app *Application) AddHealthCheck(name string, kind string, ping func() err
 	})
 }
 
-func (app *Application) AddDataSource(name string, url string, migrations []*gormigrate.Migration) *EntityManager {
-	return app.AddDataSourceExt(name, url, migrations, nil)
+func (ac ApplicationContext) GetBroker() MessageBroker {
+	return ac.app.GetBroker()
+}
+func (ac ApplicationContext) GetDbLink(name string) DbLink {
+	return ac.app.GetDbLink(name)
 }
 
-func (app *Application) AddDataSourceExt(name string, url string, migrations []*gormigrate.Migration, loader func() ([]string, error)) *EntityManager {
-	ds := EntityManager{
-		ServiceName:   strings.TrimPrefix(app.Name, "bantu-"),
-		Name:          name,
-		Url:           url,
-		Migrations:    migrations,
-		TenantsLoader: loader,
-	}
-	log.FatalErr(ds.bootstrap())
-	app.dataSources = append(app.dataSources, ds)
-
-	app.dataSourcesMap[name] = ds
-	return &ds
+func (ac ApplicationContext) GetDb() DbLink {
+	return ac.app.GetDbLink("primary")
 }
 
 func (app Application) GetBroker() MessageBroker {
@@ -186,32 +228,47 @@ func (app Application) GetBroker() MessageBroker {
 	return *app.messageBroker
 }
 
+func (ac ApplicationContext) Conf(name string, env string, required bool) string {
+	return ac.app.Conf(name, env, required)
+}
+
+func (ac ApplicationContext) IsTestEnv() bool {
+	return ac.app.IsTestEnv()
+}
+
+func (ac ApplicationContext) Set(name string, value interface{}) {
+	ac.app.args[name] = value
+}
+
+func (ac ApplicationContext) Get(name string) interface{} {
+	return ac.app.args[name]
+}
+
 func (app Application) Conf(name string, env string, required bool) string {
 	value := app.conf.Get(name, env)
-	if IsStrEmpty(value) && required {
+	if commons.IsStrEmpty(value) && required {
 		log.Fatalf("The required parameter %s (%s) was not provided, please check your config.", name, env)
 	}
 	return value
-}
-
-func (app *Application) GetDataSource() EntityManager {
-	if app.dataSources == nil || len(app.dataSources) == 0 {
-		panic("No datasource defined")
-	}
-	if len(app.dataSources) > 1 {
-		panic("More than 1 datasoure was registerd, use named datasource instead")
-	}
-	return app.dataSources[0]
 }
 
 func (app Application) Router() *AppRouter {
 	return app.router
 }
 
-func (app *Application) GetNamedDataSource(name string) EntityManager {
-	return app.dataSourcesMap[strings.ToLower(name)]
+func (app *Application) GetDbLink(name string) DbLink {
+	return *app.dataSourcesMap[strings.ToLower(name)]
 }
-func (app *Application) GetPrimaryDataSource() EntityManager {
+
+func (app *Application) Get(arg string) (interface{}, bool) {
+	if value, ok := app.args[arg]; ok {
+		return  value, true
+	}else {
+		return nil, false
+	}
+}
+
+func (app *Application) GetPrimaryEntityManager() *DbLink {
 	return app.dataSourcesMap["primary"]
 }
 
@@ -285,7 +342,7 @@ func (app *Application) handleHealthCheck(_ Request, res Response) {
 		comps[fmt.Sprintf("%s:%s", strings.ToLower(c.Kind), strings.ToLower(c.Name))] = c
 	}
 	res.OK(H{
-		"application": app.Name,
+		"application":     app.Name,
 		"version":     app.Version,
 		"description": app.Description,
 		"status":      status,
@@ -415,10 +472,9 @@ func (t *AppTest) Close() {
 }
 
 func (t *AppTest) Truncate(dsName string, names []string) {
-	ds := t.App.GetNamedDataSource(dsName)
+	ds := t.App.GetDbLink(dsName)
 	for _, name := range names {
-		tableName := fmt.Sprintf("%s_%s", ds.ServiceName, name)
-		_ = ds.Exec("DELETE FROM " + tableName)
+		_ = ds.Exec("DELETE FROM " + ds.TableName(name))
 	}
 }
 

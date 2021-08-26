@@ -10,7 +10,7 @@ type MessagePublisher interface {
 	SendSelf(event string, payload interface{}) error
 }
 
-type MessageHandler = func(event Message) error
+type MessageHandler = func(context *ApplicationContext, event Message) error
 
 type QueryOpts struct {
 	First int

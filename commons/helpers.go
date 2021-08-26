@@ -1,4 +1,4 @@
-package sf
+package commons
 
 import (
 	"bytes"
@@ -21,13 +21,19 @@ func A(err error, fn func() error) error {
 	return fn()
 }
 
-func GetBytes(key interface{}) ([]byte, error) {
+func GetBytes(data interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(key)
+	err := enc.Encode(data)
 	if err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func DecodeBytes(data []byte, dest interface{}) error {
+	buf := bytes.NewBuffer(data)
+	dev := gob.NewDecoder(buf)
+	return dev.Decode(dest)
 }
 

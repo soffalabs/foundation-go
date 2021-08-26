@@ -3,6 +3,7 @@ package sf
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/soffa-io/soffa-core-go/commons"
 	"github.com/soffa-io/soffa-core-go/log"
 	"net/http"
 	"regexp"
@@ -126,24 +127,23 @@ func (router *AppRouter) CRUDWithOptions(base string, handler CrudHandler, opts 
 	}
 }
 
-func (router *AppRouter) CRUD(base string, handler CrudHandler) {
-	router.CRUDWithOptions(base, handler, nil)
-}
-
 func (router *AppRouter) Use(handler HandlerFunc) *AppRouter {
 	router.engine.Use(func(gc *gin.Context) {
-		context := RequestContext{Application: router.app}
 		handler(
-			Request{gin: gc, Raw: gc.Request, Context: context, App: context.Application},
+			Request{gin: gc, Raw: gc.Request, Context: router.appContext},
 			Response{gin: gc},
 		)
 	})
 	return router
 }
 
+func (router *AppRouter) CRUD(base string, handler CrudHandler) {
+	router.CRUDWithOptions(base, handler, nil)
+}
+
 func (router *AppRouter) Add(r *Route) *AppRouter {
 	var paths []string
-	if !IsStrEmpty(r.Path) {
+	if !commons.IsStrEmpty(r.Path) {
 		paths = append(paths, r.Path)
 	}
 	if len(r.Paths) > 0 {
@@ -153,9 +153,8 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	handler := func(gc *gin.Context) {
 		r.checkSecurityConstraints(router, gc)
 		if !gc.IsAborted() {
-			context := RequestContext{Application: router.app}
 			r.Handler(
-				Request{gin: gc, Raw: gc.Request, Context: context, App: context.Application},
+				Request{gin: gc, Raw: gc.Request, Context: router.appContext},
 				Response{gin: gc},
 			)
 		}
@@ -189,11 +188,21 @@ func (route *Route) checkSecurityConstraints(router *AppRouter, gc *gin.Context)
 			}
 			return
 		}
-		gc.Set(AuthenticationKey, principal)
+		gc.Set(AuthenticationKey, Authentication{
+			Username:  user,
+			Guest:     false,
+			Principal: principal,
+		})
 		return
 	}
 
 	if route.jwtAuthRequired || router.jwtAuthRequired {
+
+		if commons.IsStrEmpty(router.jwtSecret) {
+			gc.AbortWithStatusJSON(http.StatusInternalServerError, H{"message": "MISSING_JWT_SECRET"})
+			return
+		}
+
 		auth := gc.GetHeader("Authorization")
 		if auth == "" {
 			gc.AbortWithStatusJSON(http.StatusUnauthorized, H{"message": "AUTH_REQUIRED required"})
@@ -206,7 +215,7 @@ func (route *Route) checkSecurityConstraints(router *AppRouter, gc *gin.Context)
 		token := auth[len("bearer "):]
 		decoded, err := DecodeJwt(router.jwtSecret, token)
 		if err != nil {
-			gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS"})
+			gc.AbortWithStatusJSON(http.StatusForbidden, H{"message": "INVALID_CREDENTIALS", "error": err.Error()})
 			if err != nil {
 				log.Error(err)
 			}
@@ -301,6 +310,19 @@ func (r Response) Send(res interface{}, err error) {
 // Request
 // *********************************************************************************************************************
 
+func (r *Request) Auth() Authentication {
+	value, exists := r.gin.Get(AuthenticationKey)
+	if exists {
+		return value.(Authentication)
+	} else {
+		return Authentication{
+			Guest:     true,
+			Principal: nil,
+			Username:  "guest",
+		}
+	}
+}
+
 func (r *Request) SetHeaders(headers map[string]string) {
 	if headers != nil {
 		for key, value := range headers {
@@ -372,7 +394,7 @@ func (r Request) IsAborted() bool {
 
 func (r Request) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
-	if !hasAuth || IsStrEmpty(user) {
+	if !hasAuth || commons.IsStrEmpty(user) {
 		_ = Capture("http.request.unauthorized", fmt.Errorf(r.gin.Request.RequestURI))
 		r.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
@@ -388,7 +410,7 @@ func (r Request) Param(name string) string {
 
 func (r Request) RequireParam(name string) string {
 	value := r.gin.Param(name)
-	if IsStrEmpty(value) {
+	if commons.IsStrEmpty(value) {
 
 		message := fmt.Sprintf("Parameter '%s' is missing", name)
 		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), fmt.Errorf(message))

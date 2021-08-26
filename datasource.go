@@ -3,6 +3,7 @@ package sf
 import (
 	"fmt"
 	"github.com/go-gormigrate/gormigrate/v2"
+	"github.com/soffa-io/soffa-core-go/commons"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/xo/dburl"
 	"gorm.io/driver/postgres"
@@ -12,29 +13,30 @@ import (
 	"strings"
 )
 
-type DbLinkCallback = func(ds EntityManager) error
+type DbLinkCallback = func(ds DbLink) error
 
-type EntityManager struct {
+type TenantsLoaderFn = func() ([]string, error)
+type DbLink struct {
 	ServiceName   string
 	Name          string
 	Url           string
-	TenantsLoader func() ([]string, error)
+	TenantsLoader TenantsLoaderFn
 	connection    *gorm.DB
 	Migrations    []*gormigrate.Migration
 }
 
 type DatasourceLoader interface {
-	LoadDatasources() ([]EntityManager, error)
+	LoadDatasources() ([]DbLink, error)
 }
 
 type FixedDatasourceLoader struct {
 	DatasourceLoader
-	Items []EntityManager
+	Items []DbLink
 }
 
 type TenantsLoader struct {
 	DatasourceLoader
-	Db    EntityManager
+	Db    DbLink
 	Query string
 }
 
@@ -42,7 +44,7 @@ type TenantsLoader struct {
 // Operations
 // *********************************************************************************************************************
 
-func (ds EntityManager) Migrate(schema *string) error {
+func (ds *DbLink) Migrate(schema *string) error {
 
 	if ds.Migrations == nil {
 		log.Warn("[%s] no migrations found to apply.", ds.Name)
@@ -51,6 +53,7 @@ func (ds EntityManager) Migrate(schema *string) error {
 
 	AssertNotEmpty(ds.ServiceName, "Datasource serviceName is required")
 	AssertNotEmpty(ds.Name, "Datasource name is required")
+
 	if schema != nil {
 		return ds.internalMigrations(ds.ServiceName, ds.Migrations, schema)
 	} else if ds.TenantsLoader != nil {
@@ -70,15 +73,15 @@ func (ds EntityManager) Migrate(schema *string) error {
 	}
 }
 
-func (tl FixedDatasourceLoader) LoadDatasources() ([]EntityManager, error) {
+func (tl FixedDatasourceLoader) LoadDatasources() ([]DbLink, error) {
 	return tl.Items, nil
 }
 
-func (ds *EntityManager) bootstrap() error {
+func (ds *DbLink) bootstrap() error {
 	if ds.connection != nil {
 		return nil
 	}
-	if IsStrEmpty(ds.Url) {
+	if commons.IsStrEmpty(ds.Url) {
 		return fmt.Errorf("invalid databaseUrl provided (empty)")
 	}
 	cnx, err := dburl.Parse(ds.Url)
@@ -106,23 +109,23 @@ func (ds *EntityManager) bootstrap() error {
 	return nil
 }
 
-func (ds EntityManager) Create(model interface{}) error {
+func (ds *DbLink) Create(model interface{}) error {
 	return ds.connection.Create(model).Error
 }
 
-func (ds EntityManager) Ping() error {
+func (ds *DbLink) Ping() error {
 	return ds.connection.Exec("SELECT 1").Error
 }
 
-func (ds EntityManager) Save(model interface{}) error {
+func (ds *DbLink) Save(model interface{}) error {
 	return ds.connection.Save(model).Error
 }
 
-func (ds EntityManager) Exec(command string) error {
+func (ds *DbLink) Exec(command string) error {
 	return ds.connection.Exec(command).Error
 }
 
-func (ds EntityManager) QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error) {
+func (ds *DbLink) QueryFirst(dest interface{}, query string, args ...interface{}) (bool, error) {
 	result := ds.connection.Limit(1).Where(query, args...).Find(dest)
 	if result.Error != nil {
 		return false, result.Error
@@ -133,11 +136,11 @@ func (ds EntityManager) QueryFirst(dest interface{}, query string, args ...inter
 	return true, nil
 }
 
-func (ds EntityManager) First(model interface{}) error {
+func (ds *DbLink) First(model interface{}) error {
 	return ds.connection.First(model).Error
 }
 
-func (ds EntityManager) Query(dest interface{}, opts *QueryOpts, where string, values ...interface{}) error {
+func (ds *DbLink) Query(dest interface{}, opts *QueryOpts, where string, values ...interface{}) error {
 	q := ds.connection.Model(dest).Where(where, values)
 	if opts != nil && opts.Limit > 0 {
 		q = q.Limit(opts.Limit)
@@ -145,11 +148,11 @@ func (ds EntityManager) Query(dest interface{}, opts *QueryOpts, where string, v
 	return q.Find(dest).Error
 }
 
-func (ds EntityManager) Pluck(table string, column string, dest interface{}) error {
-	return ds.connection.Table(ds.TableName(table)).Pluck(column, dest).Error
+func (ds *DbLink) Pluck(table string, column string, dest interface{}) error {
+	return ds.connection.Table(table).Pluck(column, dest).Error
 }
 
-func (ds EntityManager) TableName(table string) string {
+func (ds *DbLink) TableName(table string) string {
 	prefix := ds.ServiceName + "_"
 	if strings.HasPrefix(table, prefix) {
 		return table
@@ -157,7 +160,7 @@ func (ds EntityManager) TableName(table string) string {
 	return prefix + table
 }
 
-func (ds EntityManager) Count(model interface{}) (int64, error) {
+func (ds *DbLink) Count(model interface{}) (int64, error) {
 	var count int64
 	if h := ds.connection.Model(model).Count(&count); h.Error != nil {
 		return 0, h.Error
@@ -165,7 +168,7 @@ func (ds EntityManager) Count(model interface{}) (int64, error) {
 	return count, nil
 }
 
-func (ds EntityManager) CreateSchema(name string) error {
+func (ds *DbLink) CreateSchema(name string) error {
 	dialect := ds.connection.Dialector.Name()
 	if "postgres" == dialect {
 		if result := ds.connection.Exec(fmt.Sprintf("CREATE SCHEMA %s", name)); result.Error != nil {
@@ -177,15 +180,15 @@ func (ds EntityManager) CreateSchema(name string) error {
 	return nil
 }
 
-func (ds EntityManager) Transactional(callback func(link EntityManager) error) error {
+func (ds *DbLink) Transactional(callback func(link DbLink) error) error {
 	return ds.connection.Transaction(func(tx *gorm.DB) error {
 		txDS := ds
 		txDS.connection = tx
-		return callback(txDS)
+		return callback(*txDS)
 	})
 }
 
-func (ds EntityManager) FindAll(dest interface{}, limit int) error {
+func (ds *DbLink) FindAll(dest interface{}, limit int) error {
 	tx := ds.connection.Limit(limit).Find(dest)
 	if tx.Error != nil {
 		return tx.Error
@@ -193,7 +196,7 @@ func (ds EntityManager) FindAll(dest interface{}, limit int) error {
 	return nil
 }
 
-func (ds EntityManager) ExistsBy(model interface{}, where string, args ...interface{}) (bool, error) {
+func (ds *DbLink) ExistsBy(model interface{}, where string, args ...interface{}) (bool, error) {
 	var count int64
 	if h := ds.connection.Model(model).Where(where, args...).Count(&count); h.Error != nil {
 		return false, h.Error
@@ -201,7 +204,7 @@ func (ds EntityManager) ExistsBy(model interface{}, where string, args ...interf
 	return count > 0, nil
 }
 
-func (ds *EntityManager) UseSchema(name string) error {
+func (ds *DbLink) UseSchema(name string) error {
 	if ds.connection.Dialector.Name() == "sqlite" {
 		return nil
 	}
@@ -211,8 +214,8 @@ func (ds *EntityManager) UseSchema(name string) error {
 	return nil
 }
 
-func (ds EntityManager) WithTenant(name string, cb func(ds EntityManager) error) error {
-	return ds.Transactional(func(link EntityManager) error {
+func (ds DbLink) WithTenant(name string, cb func(ds DbLink) error) error {
+	return ds.Transactional(func(link DbLink) error {
 		if err := link.UseSchema(name); err != nil {
 			return err
 		}
@@ -220,11 +223,15 @@ func (ds EntityManager) WithTenant(name string, cb func(ds EntityManager) error)
 	})
 }
 
-func (ds EntityManager) internalMigrations(prefix string, migrations []*gormigrate.Migration, schema *string) error {
+func (ds *DbLink) internalMigrations(prefix string, migrations []*gormigrate.Migration, schema *string) error {
 
 	if migrations == nil {
 		log.Infof("[%s] no migrationss found to apply", ds.Name)
 		return nil
+	}
+
+	if err := ds.bootstrap(); err != nil {
+		return err
 	}
 
 	return ds.connection.Transaction(func(tx *gorm.DB) error {
@@ -243,7 +250,6 @@ func (ds EntityManager) internalMigrations(prefix string, migrations []*gormigra
 			IDColumnSize:              gormigrate.DefaultOptions.IDColumnSize,
 			UseTransaction:            gormigrate.DefaultOptions.UseTransaction,
 			ValidateUnknownMigrations: gormigrate.DefaultOptions.ValidateUnknownMigrations,
-
 		}, migrations)
 		if err := m.Migrate(); err != nil {
 			return fmt.Errorf("[%s] could not be migrated -- %v", ds.Name, err)

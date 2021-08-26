@@ -7,5 +7,6 @@ type Credentials struct {
 
 type Authentication struct {
 	Username  string
+	Guest bool
 	Principal interface{}
 }

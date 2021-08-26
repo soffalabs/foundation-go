@@ -3,6 +3,7 @@ package sf
 import (
 	"fmt"
 	evbus "github.com/asaskevich/EventBus"
+	"github.com/soffa-io/soffa-core-go/commons"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/streadway/amqp"
 	"github.com/wagslane/go-rabbitmq"
@@ -36,15 +37,15 @@ func (b MessageBroker) Send(routingKey string, event string, payload interface{}
 	return b.broker.Send(fmt.Sprintf("%s.topic", b.exchange), routingKey, event, payload)
 }
 
-func newMessageBroker(url string) (messageBrokerPort, error) {
+func newMessageBroker(context *ApplicationContext, url string) (messageBrokerPort, error) {
 	if url == "local" {
-		return &InternalinternalMessageBroker{bus: evbus.New()}, nil
+		return &InternalinternalMessageBroker{bus: evbus.New(), context: context}, nil
 	} else if strings.HasPrefix(url, "amqp://") {
 		publisher, _, err := rabbitmq.NewPublisher(url, amqp.Config{})
 		if err != nil {
 			return nil, err
 		}
-		return &RabbitMQ{url: url, publisher: publisher}, nil
+		return &RabbitMQ{url: url, publisher: publisher, context: context}, nil
 	}
 	return nil, fmt.Errorf("broker protocol not supported: %s", url)
 }
@@ -54,6 +55,7 @@ func newMessageBroker(url string) (messageBrokerPort, error) {
 type InternalinternalMessageBroker struct {
 	messageBrokerPort
 	bus evbus.Bus
+	context *ApplicationContext
 }
 
 func (b *InternalinternalMessageBroker) Send(exchange string, routingKey string, event string, payload interface{}) error {
@@ -68,15 +70,15 @@ func (b *InternalinternalMessageBroker) Send(exchange string, routingKey string,
 
 func (b *InternalinternalMessageBroker) Listen(queueName string, exchange string, _ []string, handler MessageHandler) {
 	err := b.bus.Subscribe(queueName, func(body []byte) {
-		_ = handleBrokerMessage(body, handler)
+		_ = handleBrokerMessage(b.context, body, handler)
 	})
 	log.FatalErr(Capture("internal.broker.subscribe", err))
 	err = b.bus.Subscribe(fmt.Sprintf("%s.topic", exchange), func(body []byte) {
-		_ = handleBrokerMessage(body, handler)
+		_ = handleBrokerMessage(b.context, body, handler)
 	})
 	log.FatalErr(Capture("internal.broker.subscribe", err))
 	err = b.bus.Subscribe(fmt.Sprintf("%s.fanout", exchange), func(body []byte) {
-		_ = handleBrokerMessage(body, handler)
+		_ = handleBrokerMessage(b.context, body, handler)
 	})
 	log.FatalErr(Capture("internal.broker.subscribe", err))
 }
@@ -91,6 +93,7 @@ type RabbitMQ struct {
 	messageBrokerPort
 	url       string
 	publisher rabbitmq.Publisher
+	context *ApplicationContext
 }
 
 func (b *RabbitMQ) Ping() error {
@@ -128,7 +131,7 @@ func (b *RabbitMQ) Listen(queueName string, exchange string, routingKeys []strin
 	if err == nil {
 		err = consumer.StartConsuming(
 			func(d rabbitmq.Delivery) bool {
-				return handleBrokerMessage(d.Body, handler)
+				return handleBrokerMessage(b.context, d.Body, handler)
 			},
 			queueName,
 			routingKeys,
@@ -143,7 +146,7 @@ func (b *RabbitMQ) Listen(queueName string, exchange string, routingKeys []strin
 	if err == nil {
 		err = consumer.StartConsuming(
 			func(d rabbitmq.Delivery) bool {
-				return handleBrokerMessage(d.Body, handler)
+				return handleBrokerMessage(b.context, d.Body, handler)
 			},
 			queueName,
 			[]string{""},
@@ -168,13 +171,13 @@ func prepareMessage(event string, data interface{}) ([]byte, error) {
 	return ToJson(message)
 }
 
-func handleBrokerMessage(body []byte, handler MessageHandler) bool {
+func handleBrokerMessage(context *ApplicationContext, body []byte, handler MessageHandler) bool {
 	message, err := DecodeMessage(body)
 	if Capture("amqp.message.decode", err) != nil {
 		return true
 	}
 	log.Infof("[rabbitmq] event received to %s", message.Event)
-	err = Capture("amqp.handle.message", handler(*message))
+	err = Capture("amqp.handle.message", handler(context, *message))
 	if err != nil {
 		return false
 	}
@@ -191,7 +194,7 @@ func DecodeMessage(body []byte) (*Message, error) {
 		log.Errorf("Invalid message payload received\n%s", body)
 		return nil, err
 	}
-	if IsStrEmpty(message.Event) {
+	if commons.IsStrEmpty(message.Event) {
 		return nil, fmt.Errorf("Invalid message payload received. No event provided\n%v", body)
 	}
 	return message, nil

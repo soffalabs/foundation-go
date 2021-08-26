@@ -10,8 +10,8 @@ var (
 )
 
 
-func (app *Application) AddKongHealthcheck(url string) {
-	app.AddToHealthcheck(ServiceCheck{
+func (inbound *Application) AddKongHealthcheck(url string) {
+	inbound.AddToHealthcheck(ServiceCheck{
 		Name: "Kong",
 		Kind: "Url",
 		Ping: func() error {
@@ -28,26 +28,26 @@ func (app *Application) AddKongHealthcheck(url string) {
 	})
 }
 
-func (app *Application) AddStartupListener(callback func()) {
-	if app.startupListeners == nil {
-		app.startupListeners = []func(){}
+func (inbound *Application) AddStartupListener(callback func()) {
+	if inbound.startupListeners == nil {
+		inbound.startupListeners = []func(){}
 	}
-	app.startupListeners = append(app.startupListeners, callback)
+	inbound.startupListeners = append(inbound.startupListeners, callback)
 }
 
 
-func (app *Application) AddBrokerHealthcheck(name string, broker MessageBroker) {
-	if app.messageBroker == nil {
-		app.messageBroker = &broker
+func (inbound *Application) AddBrokerHealthcheck(name string, broker MessageBroker) {
+	if inbound.messageBroker == nil {
+		inbound.messageBroker = &broker
 	}
-	app.healthChecks = append(app.healthChecks, ServiceCheck{
+	inbound.healthChecks = append(inbound.healthChecks, ServiceCheck{
 		Name: name,
 		Kind: "Broker",
 		Ping: broker.Ping,
 	})
 }
 
-func (app *Application) AddToHealthcheck(check ServiceCheck) {
-	app.healthChecks = append(app.healthChecks, check)
+func (inbound *Application) AddToHealthcheck(check ServiceCheck) {
+	inbound.healthChecks = append(inbound.healthChecks, check)
 }
 */

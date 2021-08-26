@@ -15,6 +15,7 @@ type Message struct {
 	Reply   func(interface{}) error `json:"-"`
 }
 
+
 // H is a shortcut for map[string]interface{}
 type H map[string]interface{}
 
