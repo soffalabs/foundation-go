@@ -1,4 +1,4 @@
-package commons
+package h
 
 import (
 	"strings"
@@ -10,7 +10,7 @@ var (
 
 
 func IsEmpty(value interface{}) bool {
-	if value == nil {
+	if IsNil(value) {
 		return true
 	}
 	switch value.(type) {

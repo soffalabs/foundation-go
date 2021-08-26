@@ -17,13 +17,13 @@ func (inbound *Application) AddKongHealthcheck(url string) {
 		Ping: func() error {
 			resp, err := httpClient.Get(url, nil)
 			if err != nil || resp.IsError {
-				return AnyError(err, fmt.Errorf("%s", resp.Body))
+				return AnyError(err, errors.Errorf("%s", resp.Body))
 			}
 			json := JsonValue{value: string(resp.Body)}
 			if json.GetString("message", "") == "no Route matched with those values" {
 				return nil
 			}
-			return fmt.Errorf("expectation failed")
+			return errors.Errorf("expectation failed")
 		},
 	})
 }

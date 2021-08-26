@@ -3,7 +3,8 @@ package sf
 import (
 	"fmt"
 	"github.com/go-gormigrate/gormigrate/v2"
-	"github.com/soffa-io/soffa-core-go/commons"
+	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/xo/dburl"
 	"gorm.io/driver/postgres"
@@ -81,12 +82,12 @@ func (ds *DbLink) bootstrap() error {
 	if ds.connection != nil {
 		return nil
 	}
-	if commons.IsStrEmpty(ds.Url) {
-		return fmt.Errorf("invalid databaseUrl provided (empty)")
+	if h.IsStrEmpty(ds.Url) {
+		return errors.Errorf("invalid databaseUrl provided (empty)")
 	}
 	cnx, err := dburl.Parse(ds.Url)
 	if err != nil {
-		return fmt.Errorf("error parsing databaseUrl: %v", err)
+		return errors.Errorf("error parsing databaseUrl: %v", err)
 	}
 
 	var dialect gorm.Dialector
@@ -95,7 +96,7 @@ func (ds *DbLink) bootstrap() error {
 	} else if cnx.Driver == "postgres" {
 		dialect = postgres.Open(cnx.DSN)
 	} else {
-		return fmt.Errorf("Unsupported database dialect: %s", cnx.Driver)
+		return errors.Errorf("Unsupported database dialect: %s", cnx.Driver)
 	}
 	link, err := gorm.Open(dialect, &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -149,7 +150,7 @@ func (ds *DbLink) Query(dest interface{}, opts *QueryOpts, where string, values 
 }
 
 func (ds *DbLink) Pluck(table string, column string, dest interface{}) error {
-	return ds.connection.Table(table).Pluck(column, dest).Error
+	return ds.connection.Table(ds.TableName(table)).Pluck(column, dest).Error
 }
 
 func (ds *DbLink) TableName(table string) string {
@@ -252,7 +253,7 @@ func (ds *DbLink) internalMigrations(prefix string, migrations []*gormigrate.Mig
 			ValidateUnknownMigrations: gormigrate.DefaultOptions.ValidateUnknownMigrations,
 		}, migrations)
 		if err := m.Migrate(); err != nil {
-			return fmt.Errorf("[%s] could not be migrated -- %v", ds.Name, err)
+			return errors.Errorf("[%s] could not be migrated -- %v", ds.Name, err)
 		} else {
 			log.Infof("[%s] migrations applied successfully", ds.Name)
 			return nil

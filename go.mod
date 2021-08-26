@@ -3,6 +3,7 @@ module github.com/soffa-io/soffa-core-go
 go 1.16
 
 require (
+	emperror.dev/errors v0.8.0
 	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef
 	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/gin-gonic/gin v1.7.3
@@ -24,7 +25,6 @@ require (
 	github.com/tidwall/gjson v1.8.1
 	github.com/wagslane/go-rabbitmq v0.6.2
 	github.com/xo/dburl v0.8.4
-	go.uber.org/dig v1.12.0
 	golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e // indirect
 	gorm.io/driver/mysql v1.0.3 // indirect
 	gorm.io/driver/postgres v1.1.0

@@ -2,8 +2,8 @@ package sf
 
 import (
 	"crypto/tls"
-	"fmt"
 	"github.com/go-resty/resty/v2"
+	"github.com/soffa-io/soffa-core-go/errors"
 	"time"
 )
 
@@ -133,7 +133,7 @@ func parseResponse(resp *resty.Response, err error) (HttpResponse, error) {
 	}
 
 	if resp.IsError() {
-		err = fmt.Errorf("%s", resp.Body())
+		err = errors.Errorf("%s", resp.Body())
 	}
 
 	return HttpResponse{

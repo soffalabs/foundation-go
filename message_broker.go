@@ -3,7 +3,8 @@ package sf
 import (
 	"fmt"
 	evbus "github.com/asaskevich/EventBus"
-	"github.com/soffa-io/soffa-core-go/commons"
+	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/streadway/amqp"
 	"github.com/wagslane/go-rabbitmq"
@@ -47,7 +48,7 @@ func newMessageBroker(context *ApplicationContext, url string) (messageBrokerPor
 		}
 		return &RabbitMQ{url: url, publisher: publisher, context: context}, nil
 	}
-	return nil, fmt.Errorf("broker protocol not supported: %s", url)
+	return nil, errors.Errorf("broker protocol not supported: %s", url)
 }
 
 // =========================================================================================================
@@ -194,8 +195,8 @@ func DecodeMessage(body []byte) (*Message, error) {
 		log.Errorf("Invalid message payload received\n%s", body)
 		return nil, err
 	}
-	if commons.IsStrEmpty(message.Event) {
-		return nil, fmt.Errorf("Invalid message payload received. No event provided\n%v", body)
+	if h.IsStrEmpty(message.Event) {
+		return nil, errors.Errorf("Invalid message payload received. No event provided\n%v", body)
 	}
 	return message, nil
 

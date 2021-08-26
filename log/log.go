@@ -32,6 +32,12 @@ func Warn(args ...interface{}) {
 func Errorf(format string, args ...interface{}) {
 	logrus.Errorf(format, args...)
 }
+func ErrorIf(err error, format string, args ...interface{}) {
+	if err != nil {
+		logrus.Errorf(format, args...)
+		logrus.Error(err)
+	}
+}
 
 func Error(args ...interface{}) {
 	logrus.Error(args...)

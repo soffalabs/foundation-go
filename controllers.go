@@ -3,7 +3,8 @@ package sf
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/soffa-io/soffa-core-go/commons"
+	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"net/http"
 	"regexp"
@@ -32,18 +33,18 @@ const (
 // Router
 // *********************************************************************************************************************
 
-func (router *AppRouter) SetAuthenticator(validator Authenticator) *AppRouter {
+func (router *Router) SetAuthenticator(validator Authenticator) *Router {
 	router.authenticate = validator
 	return router
 }
 
-func (router *AppRouter) SetJwtSettings(secret string, audience string) *AppRouter {
+func (router *Router) SetJwtSettings(secret string, audience string) *Router {
 	router.jwtSecret = secret
 	router.audience = audience
 	return router
 }
 
-func (router *AppRouter) Any(path string, handler HandlerFunc) *Route {
+func (router *Router) Any(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "*",
 		Path:    path,
@@ -53,7 +54,7 @@ func (router *AppRouter) Any(path string, handler HandlerFunc) *Route {
 	return route
 }
 
-func (router *AppRouter) GET(path string, handler HandlerFunc) *Route {
+func (router *Router) GET(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "GET",
 		Path:    path,
@@ -63,7 +64,7 @@ func (router *AppRouter) GET(path string, handler HandlerFunc) *Route {
 	return route
 }
 
-func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
+func (router *Router) POST(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "POST",
 		Path:    path,
@@ -73,7 +74,7 @@ func (router *AppRouter) POST(path string, handler HandlerFunc) *Route {
 	return route
 }
 
-func (router *AppRouter) PATCH(path string, handler HandlerFunc) *Route {
+func (router *Router) PATCH(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "PATCH",
 		Path:    path,
@@ -83,7 +84,7 @@ func (router *AppRouter) PATCH(path string, handler HandlerFunc) *Route {
 	return route
 }
 
-func (router *AppRouter) PUT(path string, handler HandlerFunc) *Route {
+func (router *Router) PUT(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "PUT",
 		Path:    path,
@@ -93,12 +94,12 @@ func (router *AppRouter) PUT(path string, handler HandlerFunc) *Route {
 	return route
 }
 
-func (router *AppRouter) JwtAuth() *AppRouter {
+func (router *Router) JwtAuth() *Router {
 	router.jwtAuthRequired = true
 	return router
 }
 
-func (router *AppRouter) DELETE(path string, handler HandlerFunc) *Route {
+func (router *Router) DELETE(path string, handler HandlerFunc) *Route {
 	route := &Route{
 		Method:  "DELETE",
 		Path:    path,
@@ -113,7 +114,7 @@ type RouteOpts struct {
 	BasicAuth bool
 }
 
-func (router *AppRouter) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOpts) {
+func (router *Router) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOpts) {
 	var routes []*Route
 	routes = append(routes, router.GET(base, handler.List))
 	routes = append(routes, router.POST(base, handler.Create))
@@ -127,7 +128,7 @@ func (router *AppRouter) CRUDWithOptions(base string, handler CrudHandler, opts 
 	}
 }
 
-func (router *AppRouter) Use(handler HandlerFunc) *AppRouter {
+func (router *Router) Use(handler HandlerFunc) *Router {
 	router.engine.Use(func(gc *gin.Context) {
 		handler(
 			Request{gin: gc, Raw: gc.Request, Context: router.appContext},
@@ -137,13 +138,13 @@ func (router *AppRouter) Use(handler HandlerFunc) *AppRouter {
 	return router
 }
 
-func (router *AppRouter) CRUD(base string, handler CrudHandler) {
+func (router *Router) CRUD(base string, handler CrudHandler) {
 	router.CRUDWithOptions(base, handler, nil)
 }
 
-func (router *AppRouter) Add(r *Route) *AppRouter {
+func (router *Router) Add(r *Route) *Router {
 	var paths []string
-	if !commons.IsStrEmpty(r.Path) {
+	if !h.IsStrEmpty(r.Path) {
 		paths = append(paths, r.Path)
 	}
 	if len(r.Paths) > 0 {
@@ -170,7 +171,7 @@ func (router *AppRouter) Add(r *Route) *AppRouter {
 	return router
 }
 
-func (route *Route) checkSecurityConstraints(router *AppRouter, gc *gin.Context) {
+func (route *Route) checkSecurityConstraints(router *Router, gc *gin.Context) {
 	if route.open {
 		return
 	}
@@ -198,7 +199,7 @@ func (route *Route) checkSecurityConstraints(router *AppRouter, gc *gin.Context)
 
 	if route.jwtAuthRequired || router.jwtAuthRequired {
 
-		if commons.IsStrEmpty(router.jwtSecret) {
+		if h.IsStrEmpty(router.jwtSecret) {
 			gc.AbortWithStatusJSON(http.StatusInternalServerError, H{"message": "MISSING_JWT_SECRET"})
 			return
 		}
@@ -378,7 +379,7 @@ func (r Request) CheckInputWithRegex(value string, pattern string, errorCode str
 		if err != nil {
 			message = err.Error()
 		}
-		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), fmt.Errorf(message))
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), errors.Errorf(message))
 		r.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":    errorCode,
 			"message": message,
@@ -394,8 +395,8 @@ func (r Request) IsAborted() bool {
 
 func (r Request) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := r.gin.Request.BasicAuth()
-	if !hasAuth || commons.IsStrEmpty(user) {
-		_ = Capture("http.request.unauthorized", fmt.Errorf(r.gin.Request.RequestURI))
+	if !hasAuth || h.IsStrEmpty(user) {
+		_ = Capture("http.request.unauthorized", errors.Errorf(r.gin.Request.RequestURI))
 		r.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
 		})
@@ -410,10 +411,10 @@ func (r Request) Param(name string) string {
 
 func (r Request) RequireParam(name string) string {
 	value := r.gin.Param(name)
-	if commons.IsStrEmpty(value) {
+	if h.IsStrEmpty(value) {
 
 		message := fmt.Sprintf("Parameter '%s' is missing", name)
-		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), fmt.Errorf(message))
+		_ = Capture(fmt.Sprintf("http.request.check:%s", r.gin.Request.RequestURI), errors.Errorf(message))
 
 		r.gin.AbortWithStatusJSON(http.StatusBadRequest, H{
 			"message": message,

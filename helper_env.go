@@ -1,7 +1,7 @@
 package sf
 
 import (
-	"github.com/soffa-io/soffa-core-go/commons"
+	"github.com/soffa-io/soffa-core-go/h"
 	"os"
 )
 import "strconv"
@@ -9,7 +9,7 @@ import "strconv"
 
 func Getenv(key string, fallback string, fallbackIf bool) string {
 	value := os.Getenv(key)
-	if commons.IsStrEmpty(value) && fallbackIf {
+	if h.IsStrEmpty(value) && fallbackIf {
 		return fallback
 	}
 	return value
@@ -17,7 +17,7 @@ func Getenv(key string, fallback string, fallbackIf bool) string {
 
 func Getenvi(key string, fallback int) int {
 	value := os.Getenv(key)
-	if commons.IsStrEmpty(value)  {
+	if h.IsStrEmpty(value)  {
 		return fallback
 	}
 	iv, err := strconv.Atoi(value)
@@ -29,7 +29,7 @@ func Getenvi(key string, fallback int) int {
 
 func Getenvb(key string, fallback bool) bool {
 	value := os.Getenv(key)
-	if commons.IsStrEmpty(value)  {
+	if h.IsStrEmpty(value)  {
 		return fallback
 	}
 	b, err := strconv.ParseBool(value)

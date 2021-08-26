@@ -3,6 +3,7 @@ package sf
 import (
 	"fmt"
 	"github.com/hashicorp/vault/api"
+	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/log"
 	"net/url"
 )
@@ -44,7 +45,7 @@ func ReadVaultSecret(uri string) (map[string]interface{}, error) {
 			return nil, err
 		}
 		if secret == nil {
-			return nil, fmt.Errorf("unable to locate %s", u.Path)
+			return nil, errors.Errorf("unable to locate %s", u.Path)
 		}
 	}
 

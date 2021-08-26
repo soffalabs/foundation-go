@@ -1,6 +1,6 @@
 package sf
 
-import "fmt"
+import "github.com/soffa-io/soffa-core-go/errors"
 
 type HealthCheck struct {
 	Kind    string  `json:"kind,omitempty"`
@@ -37,7 +37,7 @@ func Err(err error) R {
 }
 
 func Errf(format string, args ...interface{}) R {
-	return R{Error: fmt.Errorf(format, args...)}
+	return R{Error: errors.Errorf(format, args...)}
 }
 
 func (hc HealthCheck) get(err error) HealthCheck {

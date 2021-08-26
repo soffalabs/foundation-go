@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"github.com/gavv/httpexpect/v2"
 	"github.com/gin-gonic/gin"
-	"github.com/soffa-io/soffa-core-go/commons"
+	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"github.com/soffa-io/soffa-core-go/rpc"
 	"github.com/spf13/cobra"
@@ -20,10 +21,10 @@ import (
 	"time"
 )
 
-type AppRouter struct {
-	engine     *gin.Engine
-	App        *Application
-	appContext *ApplicationContext
+type Router struct {
+	engine          *gin.Engine
+	App             *Application
+	appContext      *ApplicationContext
 	routes          []Route
 	authenticate    Authenticator
 	jwtAuthRequired bool
@@ -76,23 +77,27 @@ type RouterConfig struct {
 	Secure bool
 }
 
+type AppHook = func(context *ApplicationContext, router *Router)
+
 type Application struct {
-	Name         string
-	Description  string
-	Version      string
-	Configure    func(app *ApplicationContext)
-	DataSources  func(app *ApplicationContext) []*DbLink
-	OnReady      func()
-	Broker       func(app *ApplicationContext) BrokerInfo
-	RpcClient       func(app *ApplicationContext) rpc.Client
-	CreateRouter func(router *AppRouter)
+	Name        string
+	Description string
+	Hooks       []AppHook
+	Version     string
+	Init        func(context *ApplicationContext, router *Router)
+	DataSources func(context *ApplicationContext) []*DbLink
+	OnReady     func()
+	Broker      func(context *ApplicationContext) BrokerInfo
+	RpcClient   func(context *ApplicationContext) rpc.Client
 
 	// @private
+	context        *ApplicationContext
 	conf           ConfManager
 	routes         []Route
-	router         *AppRouter
+	router         *Router
 	healthChecks   []ServiceCheck
 	messageBroker  *MessageBroker
+	rpcClient      rpc.Client
 	dataSources    []*DbLink
 	dataSourcesMap map[string]*DbLink
 	args           map[string]interface{}
@@ -121,7 +126,14 @@ func RegisterBean(constructor interface{}) {
 	log.FatalErr(DI.Provide(constructor))
 }*/
 
-func (app *Application) Init(env string) {
+func (app *Application) UseRpcClient(client rpc.Client) {
+	app.rpcClient = client
+}
+func (app *Application) Context() *ApplicationContext {
+	return app.context
+}
+
+func (app *Application) bootstrap(env string) {
 
 	app.healthChecks = []ServiceCheck{}
 	app.conf = newConfManager(env)
@@ -130,9 +142,11 @@ func (app *Application) Init(env string) {
 	app.args = map[string]interface{}{}
 
 	context := &ApplicationContext{
-		app: app,
+		app:  app,
 		Name: app.Name,
 	}
+
+	app.context = context
 
 	if app.DataSources != nil {
 		ds := app.DataSources(context)
@@ -151,7 +165,7 @@ func (app *Application) Init(env string) {
 		info := app.Broker(context)
 		impl, err := newMessageBroker(context, info.Url)
 		log.FatalErr(err)
-		impl.Listen( info.Queue, info.Exchange, []string{info.Queue}, info.Handler)
+		impl.Listen(info.Queue, info.Exchange, []string{info.Queue}, info.Handler)
 		app.messageBroker = &MessageBroker{
 			broker:   impl,
 			queue:    info.Queue,
@@ -163,7 +177,7 @@ func (app *Application) Init(env string) {
 		// router
 		r := gin.Default()
 		r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
-		router := &AppRouter{
+		router := &Router{
 			engine:     r,
 			App:        app,
 			appContext: context,
@@ -178,12 +192,8 @@ func (app *Application) Init(env string) {
 		app.router = router
 	}
 
-	if app.CreateRouter != nil {
-		app.CreateRouter(app.router)
-	}
-
-	if app.Configure != nil {
-		app.Configure(context)
+	if app.Init != nil {
+		app.Init(context, app.router)
 	}
 }
 
@@ -213,6 +223,11 @@ func (app *Application) AddHealthCheck(name string, kind string, ping func() err
 func (ac ApplicationContext) GetBroker() MessageBroker {
 	return ac.app.GetBroker()
 }
+
+func (ac ApplicationContext) GetRpcClient() rpc.Client {
+	return ac.app.GetRpcClient()
+}
+
 func (ac ApplicationContext) GetDbLink(name string) DbLink {
 	return ac.app.GetDbLink(name)
 }
@@ -226,6 +241,12 @@ func (app Application) GetBroker() MessageBroker {
 		panic("No message broker found")
 	}
 	return *app.messageBroker
+}
+func (app Application) GetRpcClient() rpc.Client {
+	if app.rpcClient == nil {
+		panic("No message broker found")
+	}
+	return app.rpcClient
 }
 
 func (ac ApplicationContext) Conf(name string, env string, required bool) string {
@@ -244,15 +265,19 @@ func (ac ApplicationContext) Get(name string) interface{} {
 	return ac.app.args[name]
 }
 
+func (ac ApplicationContext) UserRpcClient(client rpc.Client) {
+	ac.app.UseRpcClient(client)
+}
+
 func (app Application) Conf(name string, env string, required bool) string {
 	value := app.conf.Get(name, env)
-	if commons.IsStrEmpty(value) && required {
+	if h.IsStrEmpty(value) && required {
 		log.Fatalf("The required parameter %s (%s) was not provided, please check your config.", name, env)
 	}
 	return value
 }
 
-func (app Application) Router() *AppRouter {
+func (app Application) Router() *Router {
 	return app.router
 }
 
@@ -262,8 +287,8 @@ func (app *Application) GetDbLink(name string) DbLink {
 
 func (app *Application) Get(arg string) (interface{}, bool) {
 	if value, ok := app.args[arg]; ok {
-		return  value, true
-	}else {
+		return value, true
+	} else {
 		return nil, false
 	}
 }
@@ -326,7 +351,7 @@ func (app *Application) printHealthCheck() {
 		}
 	}
 	if !allUp {
-		_ = Capture(fmt.Sprintf("service.start:%s", app.Name), fmt.Errorf("some components are not healthy"))
+		_ = Capture(fmt.Sprintf("service.start:%s", app.Name), errors.Errorf("some components are not healthy"))
 	}
 	fmt.Printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n")
 }
@@ -342,7 +367,7 @@ func (app *Application) handleHealthCheck(_ Request, res Response) {
 		comps[fmt.Sprintf("%s:%s", strings.ToLower(c.Kind), strings.ToLower(c.Name))] = c
 	}
 	res.OK(H{
-		"application":     app.Name,
+		"application": app.Name,
 		"version":     app.Version,
 		"description": app.Description,
 		"status":      status,
@@ -409,7 +434,7 @@ func (app *Application) createServerCmd() *cobra.Command {
 		Use:   "server",
 		Short: "Start the service in server mode",
 		Run: func(cmd *cobra.Command, args []string) {
-			app.Init(envName)
+			app.bootstrap(envName)
 			if dbMigrations {
 				if err := app.ApplyDatabaseMigrations(); err != nil {
 					log.Fatal(err)
@@ -440,7 +465,7 @@ func (app *Application) createDbCommand() *cobra.Command {
 		Use:   "db:migrate",
 		Short: "Run database migrations",
 		Run: func(cmd *cobra.Command, args []string) {
-			app.Init(envName)
+			app.bootstrap(envName)
 			if err := app.ApplyDatabaseMigrations(); err != nil {
 				log.Fatal(err)
 			}
@@ -453,7 +478,7 @@ func (app *Application) createDbCommand() *cobra.Command {
 }
 
 func (app *Application) CreateTestHelper(t *testing.T) AppTest {
-	app.Init("test")
+	app.bootstrap("test")
 	assert.Nil(t, app.ApplyDatabaseMigrations())
 	time.Sleep(200 * time.Millisecond)
 	app.invokeStartupListeners()
