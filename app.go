@@ -1,332 +1,146 @@
-package sf
+package soffa
 
 import (
 	"fmt"
-	"github.com/gavv/httpexpect/v2"
-	"github.com/gin-gonic/gin"
+	"time"
+
+	"github.com/go-co-op/gocron"
+	"github.com/soffa-io/soffa-core-go/broker"
+	"github.com/soffa-io/soffa-core-go/conf"
+	"github.com/soffa-io/soffa-core-go/db"
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
+	"github.com/soffa-io/soffa-core-go/http"
 	"github.com/soffa-io/soffa-core-go/log"
-	"github.com/soffa-io/soffa-core-go/rpc"
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	swaggerFiles "github.com/swaggo/files"
-	swagger "github.com/swaggo/gin-swagger"
-	"net"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"strings"
-	"testing"
-	"time"
 )
 
-type Router struct {
-	engine          *gin.Engine
-	App             *Application
-	appContext      *ApplicationContext
-	routes          []Route
-	authenticate    Authenticator
-	jwtAuthRequired bool
-	jwtSecret       string
-	audience        string
+type App struct {
+	Name             string
+	Version          string
+	router           *http.Router
+	cfg              *conf.Manager
+	dbManager        *db.Manager
+	broker           broker.Client
+	onReadyListeners []func()
+	scheduler *Scheduler
+	args      map[string]interface{}
 }
 
-type Route struct {
-	Method            string
-	Path              string
-	Paths             []string
-	Handler           HandlerFunc
-	basicAuthRequired bool
-	jwtAuthRequired   bool
-	open              bool
-}
-
-type Authenticator = func(string, string) (*Authentication, error)
-
-type AppTest struct {
-	App    *Application
-	server *httptest.Server
-	test   *testing.T
-	expect *httpexpect.Expect
-}
-
-type Props struct {
-	Name        string
-	Values      []string
-	Required    bool
-	Description string
-}
-
-type Request struct {
-	gin     *gin.Context
-	Raw     *http.Request
-	Context *ApplicationContext
-	//Auth    *Authentication
-}
-
-type Validations struct {
-	gin *gin.Context
-}
-
-type Response struct {
-	gin *gin.Context
-}
-
-type RouterConfig struct {
-	Secure bool
-}
-
-type AppHook = func(context *ApplicationContext, router *Router)
-
-type Application struct {
-	Name        string
-	Description string
-	Hooks       []AppHook
-	Version     string
-	Init        func(context *ApplicationContext, router *Router)
-	DataSources func(context *ApplicationContext) []*DbLink
-	OnReady     func()
-	Broker      func(context *ApplicationContext) BrokerInfo
-	RpcClient   func(context *ApplicationContext) rpc.Client
-
-	// @private
-	context        *ApplicationContext
-	conf           ConfManager
-	routes         []Route
-	router         *Router
-	healthChecks   []ServiceCheck
-	messageBroker  *MessageBroker
-	rpcClient      rpc.Client
-	dataSources    []*DbLink
-	dataSourcesMap map[string]*DbLink
-	args           map[string]interface{}
-}
-
-type ApplicationContext struct {
-	app  *Application
-	Name string
-}
-
-type ServiceCheck struct {
-	Name string
-	Kind string
-	Ping func() error
-}
-
-// *********************************************************************************************************************
-// *********************************************************************************************************************
-
-/*
-func Inject(function interface{}) error {
-	return DI.Invoke(function)
-}
-
-func RegisterBean(constructor interface{}) {
-	log.FatalErr(DI.Provide(constructor))
-}*/
-
-func (app *Application) UseRpcClient(client rpc.Client) {
-	app.rpcClient = client
-}
-func (app *Application) Context() *ApplicationContext {
-	return app.context
-}
-
-func (app *Application) bootstrap(env string) {
-
-	app.healthChecks = []ServiceCheck{}
-	app.conf = newConfManager(env)
-	app.dataSources = []*DbLink{}
-	app.dataSourcesMap = map[string]*DbLink{}
-	app.args = map[string]interface{}{}
-
-	context := &ApplicationContext{
-		app:  app,
-		Name: app.Name,
+func NewApp(cfg *conf.Manager, name string, version string) *App {
+	cfg.Load()
+	a := &App{
+		cfg:       cfg,
+		Name:      name,
+		scheduler: &Scheduler{s: gocron.NewScheduler(time.UTC), empty: true},
+		Version:   version,
+		args:      map[string]interface{}{},
 	}
+	return a
+}
 
-	app.context = context
+func (a *App) SetArg(key string, value interface{}) *App{
+	a.args[key] = value
+	return a
+}
 
-	if app.DataSources != nil {
-		ds := app.DataSources(context)
-		if ds != nil {
-			for _, item := range ds {
-				err := item.bootstrap()
-				log.FatalErr(err)
-				app.dataSources = append(app.dataSources, item)
-				app.dataSourcesMap[item.Name] = item
-			}
-		}
+func (a *App) UseDB(cb func(m *db.Manager)) *App {
+	if a.dbManager == nil {
+		a.dbManager = db.NewManager()
 	}
+	cb(a.dbManager)
+	return a
+}
 
-	if app.Broker != nil {
-		//brokerUrl := inbound.Conf("amqp.url", "AMQP_URL", true)
-		info := app.Broker(context)
-		impl, err := newMessageBroker(context, info.Url)
-		log.FatalErr(err)
-		impl.Listen(info.Queue, info.Exchange, []string{info.Queue}, info.Handler)
-		app.messageBroker = &MessageBroker{
-			broker:   impl,
-			queue:    info.Queue,
-			exchange: info.Exchange,
-		}
+func (a *App) UseBroker(cb func(client broker.Client)) *App {
+	if a.broker == nil {
+		brokerUrl := a.cfg.Require("broker.url", "BROKER_URL", "MESSAGE_BROKER_URL")
+		a.broker = broker.NewClient(brokerUrl, a.Name)
 	}
+	cb(a.broker)
+	return a
+}
 
-	{
-		// router
-		r := gin.Default()
-		r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
-		router := &Router{
-			engine:     r,
-			App:        app,
-			appContext: context,
-			jwtSecret:  os.Getenv("JWT_SECRET"),
-		}
-		router.Add(&Route{
+func (a *App) Configure(cb func(router *http.Router, scheduler *Scheduler)) *App {
+	if a.router == nil {
+		a.router = http.NewRouter()
+		a.router.Add(&http.Route{
 			Method:  "GET",
 			Paths:   []string{"/status", "/healthz"},
-			Handler: app.handleHealthCheck,
-			open:    true,
+			Handler: a.handleHealthCheck,
+			Open:    true,
 		})
-		app.router = router
 	}
+	cb(a.router, a.scheduler)
+	return a
+}
 
-	if app.Init != nil {
-		app.Init(context, app.router)
+func (a *App) MigrateDB() {
+	if a.dbManager != nil {
+		a.dbManager.Migrate()
 	}
 }
 
-func (app *Application) IsTestEnv() bool {
-	return app.conf.IsTest()
-}
-
-func (app *Application) IsProd() bool {
-	return app.conf.IsProd()
-}
-
-type BrokerInfo struct {
-	Url      string
-	Queue    string
-	Exchange string
-	Handler  MessageHandler
-}
-
-func (app *Application) AddHealthCheck(name string, kind string, ping func() error) {
-	app.healthChecks = append(app.healthChecks, ServiceCheck{
-		Kind: kind,
-		Name: name,
-		Ping: ping,
-	})
-}
-
-func (ac ApplicationContext) GetBroker() MessageBroker {
-	return ac.app.GetBroker()
-}
-
-func (ac ApplicationContext) GetRpcClient() rpc.Client {
-	return ac.app.GetRpcClient()
-}
-
-func (ac ApplicationContext) GetDbLink(name string) DbLink {
-	return ac.app.GetDbLink(name)
-}
-
-func (ac ApplicationContext) GetDb() DbLink {
-	return ac.app.GetDbLink("primary")
-}
-
-func (app Application) GetBroker() MessageBroker {
-	if app.messageBroker == nil {
-		panic("No message broker found")
+func (a *App) AddStartupListener(fn func()) *App {
+	if a.onReadyListeners == nil {
+		a.onReadyListeners = []func(){}
 	}
-	return *app.messageBroker
+	a.onReadyListeners = append(a.onReadyListeners, fn)
+	return a
 }
-func (app Application) GetRpcClient() rpc.Client {
-	if app.rpcClient == nil {
-		panic("No message broker found")
+
+func (a *App) postStart() {
+
+	if a.onReadyListeners != nil {
+		defer func() {
+			for _, l := range a.onReadyListeners {
+				l()
+			}
+			log.Info("All on-ready listeneres invoked.")
+		}()
 	}
-	return app.rpcClient
-}
-
-func (ac ApplicationContext) Conf(name string, env string, required bool) string {
-	return ac.app.Conf(name, env, required)
-}
-
-func (ac ApplicationContext) IsTestEnv() bool {
-	return ac.app.IsTestEnv()
-}
-
-func (ac ApplicationContext) Set(name string, value interface{}) {
-	ac.app.args[name] = value
-}
-
-func (ac ApplicationContext) Get(name string) interface{} {
-	return ac.app.args[name]
-}
-
-func (ac ApplicationContext) UserRpcClient(client rpc.Client) {
-	ac.app.UseRpcClient(client)
-}
-
-func (app Application) Conf(name string, env string, required bool) string {
-	value := app.conf.Get(name, env)
-	if h.IsStrEmpty(value) && required {
-		log.Fatalf("The required parameter %s (%s) was not provided, please check your config.", name, env)
+	if a.scheduler != nil {
+		a.scheduler.Start()
 	}
-	return value
 }
 
-func (app Application) Router() *Router {
-	return app.router
+func (a *App) Start(port int) {
+	a.printHealthCheck()
+	a.postStart()
+	a.router.Start(port)
 }
 
-func (app *Application) GetDbLink(name string) DbLink {
-	return *app.dataSourcesMap[strings.ToLower(name)]
+type HealthCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
 }
 
-func (app *Application) Get(arg string) (interface{}, bool) {
-	if value, ok := app.args[arg]; ok {
-		return value, true
+func (h HealthCheck) get(err error) HealthCheck {
+	if err != nil {
+		h.Status = "DOWN"
+		h.Message = err.Error()
 	} else {
-		return nil, false
+		h.Status = "UP"
 	}
+	return h
 }
 
-func (app *Application) GetPrimaryEntityManager() *DbLink {
-	return app.dataSourcesMap["primary"]
-}
-
-func (app *Application) getHealthCheck() (bool, []HealthCheck) {
+func (a *App) getHealthCheck() (bool, []HealthCheck) {
 	var comps []HealthCheck
 
-	if app.dataSources != nil {
-		for _, ds := range app.dataSources {
-			comps = append(comps, HealthCheck{
-				Name: ds.Name,
-				Kind: "Database",
-			}.get(ds.Ping()))
-		}
-	}
-
-	if app.messageBroker != nil {
+	if a.dbManager != nil {
 		comps = append(comps, HealthCheck{
-			Kind: "Broker",
-			Name: "default",
-		}.get(app.messageBroker.broker.Ping()))
+			Name: "db",
+		}.get(a.dbManager.Ping()))
 	}
 
-	if len(app.healthChecks) > 0 {
-		for _, c := range app.healthChecks {
-			comps = append(comps, HealthCheck{
-				Name: c.Name,
-				Kind: c.Kind,
-			}.get(c.Ping()))
-		}
+	if a.broker != nil {
+		comps = append(comps, HealthCheck{
+			Name: "broker",
+		}.get(a.broker.Ping()))
 	}
 
 	allUp := true
-
 	for _, hc := range comps {
 		if hc.Status == "DOWN" {
 			allUp = false
@@ -337,306 +151,73 @@ func (app *Application) getHealthCheck() (bool, []HealthCheck) {
 	return allUp, comps
 }
 
-func (app *Application) printHealthCheck() {
-	fmt.Println("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-	fmt.Printf("%s:%s\n", app.Name, app.Version)
-	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-	fmt.Println("\nHealthchecks: ")
-	allUp, checks := app.getHealthCheck()
-	for _, hc := range checks {
-		if hc.Status == "UP" {
-			fmt.Printf("> %s.%s: %s\n", hc.Kind, hc.Name, hc.Status)
-		} else {
-			fmt.Printf("> %s.%s:- %s %v\n", hc.Kind, hc.Name, hc.Status, hc.Message)
-		}
-	}
-	if !allUp {
-		_ = Capture(fmt.Sprintf("service.start:%s", app.Name), errors.Errorf("some components are not healthy"))
-	}
-	fmt.Printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n")
-}
-
-func (app *Application) handleHealthCheck(_ Request, res Response) {
+func (a *App) handleHealthCheck(c *http.Context) {
 	status := "UP"
-	allUp, checks := app.getHealthCheck()
+	allUp, checks := a.getHealthCheck()
 	if !allUp {
 		status = "DOWN"
 	}
 	comps := map[string]HealthCheck{}
 	for _, c := range checks {
-		comps[fmt.Sprintf("%s:%s", strings.ToLower(c.Kind), strings.ToLower(c.Name))] = c
+		comps[c.Name] = c
 	}
-	res.OK(H{
-		"application": app.Name,
-		"version":     app.Version,
-		"description": app.Description,
+	c.OK(h.Map{
+		"application": a.Name,
+		"version":     a.Version,
 		"status":      status,
 		"components":  comps,
 	})
 }
 
-func (app *Application) ApplyDatabaseMigrations() error {
-	if app.dataSources == nil {
-		return nil
+func (a *App) printHealthCheck() {
+	fmt.Println("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+	fmt.Printf("%s:%s\n", a.Name, a.Version)
+	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+	fmt.Println("\nHealthchecks: ")
+	allUp, checks := a.getHealthCheck()
+	for _, hc := range checks {
+		if hc.Status == "UP" {
+
+			fmt.Printf("> %s: %s\n", hc.Name, hc.Status)
+		} else {
+			fmt.Printf("> %s:- %s %v\n", hc.Name, hc.Status, hc.Message)
+		}
 	}
-	for _, ds := range app.dataSources {
-		err := ds.Migrate(nil)
-		log.FatalErr(err)
+	if !allUp {
+		_ = log.Capture(fmt.Sprintf("service.start:%s", a.Name), errors.Errorf("some components are not healthy"))
 	}
-	return nil
+	fmt.Printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n")
+
 }
 
-func (app *Application) invokeStartupListeners() {
-	if app.OnReady != nil {
+func (a *App) Arg(key string) interface{}{
+	return a.args[key]
+}
+
+
+type Scheduler struct {
+	app   *App
+	s     *gocron.Scheduler
+	empty bool
+}
+
+func (s *Scheduler) Start() {
+	if !s.empty {
+		s.s.StartAsync()
+		log.Info("Job secheduler is started.")
+	}
+}
+
+func (s *Scheduler) Every(interval string, task func()) {
+	_, err := s.s.Every(interval).Do(func() {
 		defer func() {
-			app.OnReady()
-			log.Info("all startup listeneres invoked.")
+			if r := recover(); r != nil {
+				log.Error("critital error from task execution -- %v", r)
+			}
 		}()
-	}
-}
+		task()
+	})
+	log.FatalIf(err)
+	s.empty = false
 
-func (app *Application) Start(port int) {
-	app.printHealthCheck()
-	app.invokeStartupListeners()
-	if port == 0 {
-		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-		Fatal(err)
-		l, err := net.ListenTCP("tcp", addr)
-		Fatal(err)
-		defer func(l *net.TCPListener) {
-			_ = l.Close()
-		}(l)
-		port = l.Addr().(*net.TCPAddr).Port
-	}
-	_ = app.router.engine.Run(fmt.Sprintf(":%d", port))
-
-}
-
-func (app Application) Execute() {
-	cobra.OnInitialize()
-	var rootCmd = &cobra.Command{
-		Use:     app.Name,
-		Short:   app.Description,
-		Version: app.Version,
-	}
-	rootCmd.AddCommand(app.createServerCmd())
-	rootCmd.AddCommand(app.createDbCommand())
-	_ = rootCmd.Execute()
-}
-
-func (app *Application) createServerCmd() *cobra.Command {
-	var port int
-	var randomPort bool
-	var dbMigrations bool
-	var envName string
-
-	cmd := &cobra.Command{
-		Use:   "server",
-		Short: "Start the service in server mode",
-		Run: func(cmd *cobra.Command, args []string) {
-			app.bootstrap(envName)
-			if dbMigrations {
-				if err := app.ApplyDatabaseMigrations(); err != nil {
-					log.Fatal(err)
-				}
-			} else {
-				log.Info("database migrations were skipped")
-			}
-			if randomPort {
-				app.Start(0)
-			} else {
-				app.Start(port)
-			}
-		},
-	}
-	cmd.Flags().StringVarP(&envName, "env", "e", os.Getenv("ENV"), "active environment profile")
-	cmd.Flags().IntVarP(&port, "port", "p", Getenvi("PORT", 8080), "server port")
-	cmd.Flags().BoolVarP(&randomPort, "random-port", "r", false, "start the server on a random available port")
-	cmd.Flags().BoolVarP(&dbMigrations, "db-migrations", "m", Getenvb("DB_MIGRATIONS", true), "apply database migrations")
-
-	return cmd
-}
-
-func (app *Application) createDbCommand() *cobra.Command {
-	var configSource string
-	var envName string
-
-	cmd := &cobra.Command{
-		Use:   "db:migrate",
-		Short: "Run database migrations",
-		Run: func(cmd *cobra.Command, args []string) {
-			app.bootstrap(envName)
-			if err := app.ApplyDatabaseMigrations(); err != nil {
-				log.Fatal(err)
-			}
-		},
-	}
-	cmd.Flags().StringVarP(&configSource, "config", "c", os.Getenv("CONFIG_SOURCE"), "config source")
-	cmd.Flags().StringVarP(&envName, "env", "e", Getenv(os.Getenv("ENV"), "dev", true), "active environment profile")
-
-	return cmd
-}
-
-func (app *Application) CreateTestHelper(t *testing.T) AppTest {
-	app.bootstrap("test")
-	assert.Nil(t, app.ApplyDatabaseMigrations())
-	time.Sleep(200 * time.Millisecond)
-	app.invokeStartupListeners()
-	server := httptest.NewServer(app.router.engine)
-	return AppTest{
-		App:    app,
-		test:   t,
-		expect: httpexpect.New(t, server.URL),
-		server: server,
-	}
-
-}
-
-func (t *AppTest) Close() {
-	t.server.Close()
-}
-
-func (t *AppTest) Truncate(dsName string, names []string) {
-	ds := t.App.GetDbLink(dsName)
-	for _, name := range names {
-		_ = ds.Exec("DELETE FROM " + ds.TableName(name))
-	}
-}
-
-func (t *AppTest) GET(path string) TestRequest {
-	return TestRequest{
-		request: t.expect.GET(path),
-	}
-}
-
-func (t *AppTest) POST(path string, data interface{}) TestRequest {
-	return TestRequest{
-		request: t.expect.POST(path).WithJSON(data),
-	}
-}
-
-func (t *AppTest) PUT(path string, data interface{}) TestRequest {
-	return TestRequest{
-		request: t.expect.PUT(path).WithJSON(data),
-	}
-}
-
-func (t *AppTest) DELETE(path string, data interface{}) TestRequest {
-	return TestRequest{
-		request: t.expect.DELETE(path).WithJSON(data),
-	}
-}
-
-func (t *AppTest) PATCH(path string, data interface{}) TestRequest {
-	return TestRequest{
-		request: t.expect.PATCH(path).WithJSON(data),
-	}
-}
-
-func (t TestRequest) Expect() TestResponse {
-	return TestResponse{
-		response: t.request.Expect(),
-	}
-}
-
-func (t TestRequest) Bearer(token string) TestRequest {
-	t.request.WithHeader("Authorization", fmt.Sprintf("Bearer %s", token))
-	return t
-}
-
-func (t TestRequest) BasicAuth(user string, password string) TestRequest {
-	t.request.WithBasicAuth(user, password)
-	return t
-}
-
-type TestRequest struct {
-	request *httpexpect.Request
-}
-
-type TestResponse struct {
-	response *httpexpect.Response
-}
-
-type TestResult struct {
-	value *httpexpect.Value
-}
-
-func (t TestResponse) OK() TestResponse {
-	t.response.Status(http.StatusOK)
-	return t
-}
-
-func (t TestResponse) Unauthorized() TestResponse {
-	t.response.Status(http.StatusUnauthorized)
-	return t
-}
-
-func (t TestResponse) BadRequest() TestResponse {
-	t.response.Status(http.StatusBadRequest)
-	return t
-}
-
-func (t TestResponse) Forbidden() TestResponse {
-	t.response.Status(http.StatusForbidden)
-	return t
-}
-
-func (t TestResponse) Status(status int) TestResponse {
-	t.response.Status(status)
-	return t
-}
-
-func (t TestResponse) Json(path string) TestResult {
-	return TestResult{
-		value: t.response.JSON().Path(path),
-	}
-}
-
-func (t TestResult) Is(value interface{}) TestResult {
-	t.value.Equal(value)
-	return t
-}
-
-func (t TestResult) Contains(value string) TestResult {
-	t.value.String().Contains(value)
-	return t
-}
-
-func (t TestResult) NotContains(value string) TestResult {
-	t.value.String().NotContains(value)
-	return t
-}
-
-func (t TestResult) IsArray() TestResult {
-	t.value.Array()
-	return t
-}
-
-func (t TestResult) IsEmptyArray() TestResult {
-	t.value.Array().Empty()
-	return t
-}
-
-func (t TestResult) IsNonEmptyArray() TestResult {
-	t.value.Array().NotEmpty()
-	return t
-}
-
-func (t TestResult) String() string {
-	return t.value.String().Raw()
-}
-
-func (t TestResult) NotEmpty() TestResult {
-	t.value.String().NotEmpty()
-	return t
-}
-
-func (t TestResult) IsTrue() TestResult {
-	t.value.Boolean().True()
-	return t
-}
-
-func (t TestResult) Equal(value interface{}) TestResult {
-	t.value.Equal(value)
-	return t
 }

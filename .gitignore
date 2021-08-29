@@ -36,5 +36,4 @@ routes/
 .vscode
 
 /none
-/db
-*.db
+/*.db

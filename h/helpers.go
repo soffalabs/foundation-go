@@ -16,6 +16,13 @@ func AnyStr(candidates ...string) string {
 	return ""
 }
 
+func Nil(data interface{}) interface{} {
+	if IsNil(data){
+		return nil
+	}
+	return data
+}
+
 func IsNil(data interface{}) bool {
 	if data == nil {
 		return true
@@ -32,6 +39,10 @@ func IsNil(data interface{}) bool {
 }
 
 func GetBytes(data interface{}) ([]byte, error) {
+	switch data.(type) {
+	case []byte:
+		return data.([]byte), nil
+	}
 	if IsNil(data) {
 		return nil, nil
 	}
@@ -44,19 +55,22 @@ func GetBytes(data interface{}) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func DecodeBytes(data []byte, dest interface{}) error {
+func DecodeBytes(data interface{}, dest interface{}) error {
 	if IsNil(dest) {
 		return errors.New("unable to decode bytes into nul reference")
 	}
-	if data == nil || len(data)==0 {
+	b, err := GetBytes(data)
+	if err != nil {
+		return err
+	}
+	if data == nil || len(b) == 0 {
 		return nil
 	}
-	buf := bytes.NewBuffer(data)
+	buf := bytes.NewBuffer(b)
 	dev := gob.NewDecoder(buf)
-	err := dev.Decode(dest)
+	err = dev.Decode(dest)
 	if err != nil {
 		return errors.Wrap(err, "bytes decoding failed")
 	}
 	return nil
 }
-

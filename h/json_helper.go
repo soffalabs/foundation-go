@@ -1,4 +1,4 @@
-package sf
+package h
 
 import (
 	"encoding/json"
@@ -48,10 +48,12 @@ func ToJsonStr(input interface{}) (string, error) {
 }
 
 func ToJsonStrSafe(input interface{}) string {
+	if IsNil(input) {
+		return ""
+	}
 	data, err := json.Marshal(input)
 	if err != nil {
-		log.Warn(err)
-		return ""
+		log.Fatal(err)
 	}
 	return string(data)
 }
@@ -63,6 +65,6 @@ func FromJson(data []byte, dest interface{}) error {
 	return nil
 }
 
-func FromJsonStrng(data string, dest interface{}) error {
+func FromJsonStr(data string, dest interface{}) error {
 	return FromJson([]byte(data), dest)
 }

@@ -1,24 +1,25 @@
-package sf
+package http
 
 import (
 	"crypto/tls"
 	"github.com/go-resty/resty/v2"
 	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 	"time"
 )
 
-type HttpInterceptor = func(method string, url string, body interface{}, headers HttpHeaders) *HttpResponse
-type HttpHeaders = map[string]string
+type Interceptor = func(method string, url string, body interface{}, headers Headers) *Response
+type Headers = map[string]string
 type FormData = map[string]string
 
-type HttpClient interface {
-	Get(url string, headers *HttpHeaders) (HttpResponse, error)
-	PostForm(url string, formData FormData, headers *HttpHeaders) (HttpResponse, error)
-	Post(url string, payload interface{}, headers *HttpHeaders) (HttpResponse, error)
-	Delete(url string, payload interface{}, headers *HttpHeaders) (HttpResponse, error)
+type Client interface {
+	Get(url string, headers *Headers) (Response, error)
+	PostForm(url string, formData FormData, headers *Headers) (Response, error)
+	Post(url string, payload interface{}, headers *Headers) (Response, error)
+	Delete(url string, payload interface{}, headers *Headers) (Response, error)
 }
 
-type HttpResponse struct {
+type Response struct {
 	Status  int
 	Body    []byte
 	IsError bool
@@ -30,15 +31,15 @@ type DefaultHttpClient struct {
 }
 
 var (
-	httpInterceptor HttpInterceptor
+	httpInterceptor Interceptor
 )
 
 
-func RegisterHttpInterceptor(interceptor HttpInterceptor) {
+func Intercept(interceptor Interceptor) {
 	httpInterceptor = interceptor
 }
 
-func NewHttpClient(debug bool) HttpClient {
+func NewHttpClient(debug bool) Client {
 	client := resty.New()
 	client.SetDebug(debug)
 	// client.SetTLSClientConfig(&tls.Config{ RootCAs: roots })
@@ -50,22 +51,22 @@ func NewHttpClient(debug bool) HttpClient {
 	}
 }
 
-func (c HttpResponse) Decode(dest interface{}) error {
-	return FromJson(c.Body, dest)
+func (c Response) Decode(dest interface{}) error {
+	return h.FromJson(c.Body, dest)
 }
 
-func (c *HttpResponse) WithJsonBody(body interface{}) *HttpResponse {
-	data, _ := ToJson(body)
+func (c *Response) WithJsonBody(body interface{}) *Response {
+	data, _ := h.ToJson(body)
 	c.Body = data
 	return c
 }
-func NewHttpResponse(status int, body interface{}) *HttpResponse {
-	data, _ := ToJson(body)
-	return &HttpResponse{Status:status, Body: data}
+func NewHttpResponse(status int, body interface{}) *Response {
+	data, _ := h.ToJson(body)
+	return &Response{Status: status, Body: data}
 }
 
-func (c DefaultHttpClient) Get(url string, headers *HttpHeaders) (HttpResponse, error) {
-	h := HttpHeaders{}
+func (c DefaultHttpClient) Get(url string, headers *Headers) (Response, error) {
+	h := Headers{}
 	if headers != nil {
 		h = *headers
 	}
@@ -77,8 +78,8 @@ func (c DefaultHttpClient) Get(url string, headers *HttpHeaders) (HttpResponse, 
 	return parseResponse(c.client.R().SetHeaders(h).Get(url))
 }
 
-func (c DefaultHttpClient) PostForm(url string, formData FormData, headers *HttpHeaders) (HttpResponse, error) {
-	h := HttpHeaders{}
+func (c DefaultHttpClient) PostForm(url string, formData FormData, headers *Headers) (Response, error) {
+	h := Headers{}
 	if headers != nil {
 		h = *headers
 	}
@@ -94,8 +95,8 @@ func (c DefaultHttpClient) PostForm(url string, formData FormData, headers *Http
 
 }
 
-func (c DefaultHttpClient) Post(url string, body interface{}, headers *HttpHeaders) (HttpResponse, error) {
-	h := HttpHeaders{}
+func (c DefaultHttpClient) Post(url string, body interface{}, headers *Headers) (Response, error) {
+	h := Headers{}
 	if headers != nil {
 		h = *headers
 	}
@@ -110,8 +111,8 @@ func (c DefaultHttpClient) Post(url string, body interface{}, headers *HttpHeade
 		Post(url))
 }
 
-func (c DefaultHttpClient) Delete(url string, body interface{}, headers *HttpHeaders) (HttpResponse, error) {
-	h := HttpHeaders{}
+func (c DefaultHttpClient) Delete(url string, body interface{}, headers *Headers) (Response, error) {
+	h := Headers{}
 	if headers != nil {
 		h = *headers
 	}
@@ -126,17 +127,17 @@ func (c DefaultHttpClient) Delete(url string, body interface{}, headers *HttpHea
 		Post(url))
 }
 
-func parseResponse(resp *resty.Response, err error) (HttpResponse, error) {
+func parseResponse(resp *resty.Response, err error) (Response, error) {
 
 	if err != nil {
-		return HttpResponse{}, err
+		return Response{}, err
 	}
 
 	if resp.IsError() {
 		err = errors.Errorf("%s", resp.Body())
 	}
 
-	return HttpResponse{
+	return Response{
 		Status:  resp.StatusCode(),
 		Body:    resp.Body(),
 		IsError: resp.IsError(),

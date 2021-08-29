@@ -1,4 +1,4 @@
-package sf
+package h
 
 import (
 	"fmt"
@@ -18,13 +18,13 @@ func SetVaultInterceptor(fn VaultInterceptor) {
 	vaultInterceptor = &fn
 }
 
-func ReadVaultSecret(uri string) (map[string]interface{}, error) {
+func ReadVaultSecret(uri string, token string) (map[string]interface{}, error) {
 
 	var secret *api.Secret
 
 	if vaultInterceptor != nil {
 		data := (*vaultInterceptor)()
-		secret = &api.Secret{Data: H{"data": data}}
+		secret = &api.Secret{Data: Map{"data": data}}
 	} else {
 
 		u, err := url.Parse(uri)
@@ -39,7 +39,11 @@ func ReadVaultSecret(uri string) (map[string]interface{}, error) {
 		if err != nil {
 			return nil, err
 		}
-		client.SetToken(u.User.Username())
+		if IsEmpty(token) {
+			client.SetToken(u.User.Username())
+		}else {
+			client.SetToken(token)
+		}
 		secret, err = client.Logical().Read(fmt.Sprintf("secret/data/%s", u.Path))
 		if err != nil {
 			return nil, err

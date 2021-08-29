@@ -1,4 +1,4 @@
-package sf
+package counters
 
 import "sync/atomic"
 

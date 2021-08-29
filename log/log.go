@@ -1,67 +1,93 @@
 package log
 
 import (
-	"github.com/sirupsen/logrus"
-	"os"
+	"github.com/soffa-io/soffa-core-go/errors"
+	"go.uber.org/zap"
+)
+
+var (
+	logger   *zap.SugaredLogger
+	logLevel = "DEBUG"
 )
 
 func Infof(format string, args ...interface{}) {
-	logrus.Infof(format, args...)
+	logger.Infof(format, args...)
 }
 
 func Info(args ...interface{}) {
-	logrus.Info(args...)
+	logger.Info(args...)
 }
 
 func Debugf(format string, args ...interface{}) {
-	logrus.Debugf(format, args...)
+	logger.Debugf(format, args...)
 }
 
 func Debug(args ...interface{}) {
-	logrus.Debug(args...)
+	logger.Debug(args...)
 }
 
 func Warnf(format string, args ...interface{}) {
-	logrus.Warnf(format, args...)
+	logger.Warnf(format, args...)
 }
 
 func Warn(args ...interface{}) {
-	logrus.Warn(args...)
+	logger.Warn(args...)
 }
 
 func Errorf(format string, args ...interface{}) {
-	logrus.Errorf(format, args...)
+	logger.Errorf(format, args...)
 }
 func ErrorIf(err error, format string, args ...interface{}) {
 	if err != nil {
-		logrus.Errorf(format, args...)
-		logrus.Error(err)
+		logger.Errorf(format, args...)
+		logger.Error(err)
 	}
 }
 
+func Wrap(err error, message string) {
+	logger.Error(errors.Wrap(err, message))
+}
 func Error(args ...interface{}) {
-	logrus.Error(args...)
+	logger.Error(args...)
 }
 
 func Fatalf(format string, args ...interface{}) {
-	logrus.Fatalf(format, args...)
+	logger.Fatalf(format, args...)
 }
 
 func Fatal(args ...interface{}) {
-	logrus.Fatal(args...)
+	logger.Fatal(args...)
 }
 
-func FatalErr(err error) {
+func FatalIf(err error) {
 	if err != nil {
-		logrus.Fatal(err)
+		logger.Fatal(err)
 	}
 }
 
 func IsDebugEnabled() bool {
-	return logrus.IsLevelEnabled(logrus.DebugLevel)
+	return logLevel == "DEBUG"
+}
+
+func Init(level string) {
+	logLevel = level
 }
 
 func init() {
-	logrus.SetOutput(os.Stdout)
+	f, _ := zap.NewProduction()
+	defer func(f *zap.Logger) {
+		_ = f.Sync()
+	}(f) // flushes buffer, if any
+	logger = f.Sugar()
+}
 
+func CaptureSilent(operation string, err error) {
+	_ = Capture(operation, err)
+}
+
+func Capture(operation string, err error) error {
+	if err != nil {
+		logger.Error("[capture] %s | %s", operation, err.Error())
+	}
+	return err
 }
