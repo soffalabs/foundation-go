@@ -67,7 +67,7 @@ func (b *InternalinternalMessageBroker) Send(exchange string, routingKey string,
 		return Capture("broker.message.encode", err)
 	}
 	b.bus.Publish(exchange, data)
-	log.Infof("[broker] event %s sent to %s and %s", event, exchange, routingKey)
+	log.Instance.Infof("[broker] event %s sent to %s and %s", event, exchange, routingKey)
 	return nil
 }
 
@@ -75,15 +75,15 @@ func (b *InternalinternalMessageBroker) Listen(queueName string, exchange string
 	err := b.bus.Subscribe(queueName, func(body []byte) {
 		_ = handleBrokerMessage(b.context, body, handler)
 	})
-	log.FatalErr(Capture("internal.broker.subscribe", err))
+	log.Instance.FatalErr(Capture("internal.broker.subscribe", err))
 	err = b.bus.Subscribe(fmt.Sprintf("%s.topic", exchange), func(body []byte) {
 		_ = handleBrokerMessage(b.context, body, handler)
 	})
-	log.FatalErr(Capture("internal.broker.subscribe", err))
+	log.Instance.FatalErr(Capture("internal.broker.subscribe", err))
 	err = b.bus.Subscribe(fmt.Sprintf("%s.fanout", exchange), func(body []byte) {
 		_ = handleBrokerMessage(b.context, body, handler)
 	})
-	log.FatalErr(Capture("internal.broker.subscribe", err))
+	log.Instance.FatalErr(Capture("internal.broker.subscribe", err))
 }
 
 func (b *InternalinternalMessageBroker) Ping() error {
@@ -124,7 +124,7 @@ func (b *RabbitMQ) Send(exchange string, routingKey string, event string, payloa
 		rabbitmq.WithPublishOptionsExchange(exchange),
 	))
 	if err == nil {
-		log.Infof("[rabbitmq] event %s sent to %s with routingKey  %s", event, exchange, routingKey)
+		log.Instance.Infof("[rabbitmq] event %s sent to %s with routingKey  %s", event, exchange, routingKey)
 	}
 	return err
 }
@@ -161,7 +161,7 @@ func (b *RabbitMQ) Listen(queueName string, exchange string, routingKeys []strin
 			rabbitmq.WithConsumeOptionsBindingExchangeDurable,
 		)
 	}
-	log.FatalErr(Capture("rabbitmq.connect", err))
+	log.Instance.FatalErr(Capture("rabbitmq.connect", err))
 }
 
 // =========================================================================================================
@@ -179,7 +179,7 @@ func handleBrokerMessage(context *app.ApplicationContext, body []byte, handler M
 	if Capture("amqp.message.decode", err) != nil {
 		return true
 	}
-	log.Infof("[rabbitmq] event received to %s", message.Event)
+	log.Instance.Infof("[rabbitmq] event received to %s", message.Event)
 	err = Capture("amqp.handle.message", handler(context, *message))
 	if err != nil {
 		return false
@@ -188,13 +188,13 @@ func handleBrokerMessage(context *app.ApplicationContext, body []byte, handler M
 }
 
 func DecodeMessage(body []byte) (*model.Message, error) {
-	if log.IsDebugEnabled() {
-		log.Debugf("[message.application] -- %s", body)
+	if log.Instance.IsDebugEnabled() {
+		log.Instance.Debugf("[message.application] -- %s", body)
 	}
 
 	var message *model.Message
 	if err := h.FromJson(body, &message); err != nil {
-		log.Errorf("Invalid message payload received\n%s", body)
+		log.Instance.Errorf("Invalid message payload received\n%s", body)
 		return nil, err
 	}
 	if h.IsStrEmpty(message.Event) {

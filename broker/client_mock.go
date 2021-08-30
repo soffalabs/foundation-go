@@ -61,7 +61,7 @@ func (n *FakeRpcClient) Request(subj string, data interface{}, dest interface{})
 		return errors.Wrapf(err, "[fake.rpc] error sending message to %s -- %v", subj, err)
 	}
 
-	log.Infof("[fake.rpc] message sent to to %s", subj)
+	log.Default.Infof("[fake.rpc] message sent to to %s", subj)
 
 	if result == nil {
 		return nil
@@ -73,7 +73,7 @@ func (n *FakeRpcClient) Subscribe(subj string, handler Handler) {
 	n.subjects[subj] = func(data interface{}) (interface{}, error) {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Errorf( "message handling failed [%s] -- %s", subj, err.(error).Error())
+				log.Default.Errorf( "message handling failed [%s] -- %s", subj, err.(error).Error())
 			}
 		}()
 		bytes, err := h.GetBytes(data)
@@ -85,7 +85,7 @@ func (n *FakeRpcClient) Subscribe(subj string, handler Handler) {
 }
 
 func NewMockClient(name string) *FakeRpcClient {
-	log.Infof("[fakerpc] %s is now ready", name)
+	log.Default.Infof("[fakerpc] %s is now ready", name)
 	return &FakeRpcClient{
 		subjects: map[string]func(interface{}) (interface{}, error){},
 	}

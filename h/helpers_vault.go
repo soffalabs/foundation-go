@@ -29,7 +29,7 @@ func ReadVaultSecret(uri string, token string) (map[string]interface{}, error) {
 
 		u, err := url.Parse(uri)
 		if err != nil {
-			log.Errorf("url parsing failed: %s", uri)
+			log.Default.Errorf("url parsing failed: %s", uri)
 			return nil, err
 		}
 		config := &api.Config{

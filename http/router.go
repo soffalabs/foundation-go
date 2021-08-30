@@ -3,6 +3,7 @@ package http
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soffa-io/soffa-core-go/h"
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
@@ -46,6 +47,9 @@ type Route struct {
 func NewRouter() *Router {
 	r := gin.Default()
 	r.GET("/swagger/*any", swagger.WrapHandler(swaggerFiles.Handler))
+	r.Any("/metrics", func(c *gin.Context) {
+		promhttp.Handler().ServeHTTP(c.Writer, c.Request)
+	})
 	return &Router{engine: r}
 }
 

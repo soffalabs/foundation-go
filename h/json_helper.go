@@ -23,7 +23,7 @@ func ToJson(input interface{}) ([]byte, error) {
 	default:
 		data, err := json.Marshal(input)
 		if err != nil {
-			log.Errorf("marshaling of %s failed with error %v", data, err)
+			log.Default.Errorf("marshaling of %s failed with error %v", data, err)
 			return nil, err
 		}
 		fmt.Printf("%s\n", data)
@@ -53,7 +53,7 @@ func ToJsonStrSafe(input interface{}) string {
 	}
 	data, err := json.Marshal(input)
 	if err != nil {
-		log.Fatal(err)
+		log.Default.Fatal(err)
 	}
 	return string(data)
 }

@@ -21,13 +21,13 @@ func NewManager() *Manager {
 func (m *Manager) Add(ds DS) *Link  {
 	if h.IsStrEmpty(ds.Id) {
 		if !m.IsEmpty() {
-			log.Fatal("When adding multiple ds, an explicit Id is required")
+			log.Default.Fatal("When adding multiple ds, an explicit Id is required")
 		}else {
 			ds.Id = "primary"
 		}
 	}
 	if h.IsStrEmpty(ds.Url) {
-		log.Fatal("Database url cannot be empty")
+		log.Default.Fatal("Database url cannot be empty")
 	}
 	ds.bootstrap()
 	m.ds[ds.Id] = &ds
@@ -38,9 +38,13 @@ func (m *Manager) Migrate() {
 	if m.IsEmpty()  || m.migrated {
 		return
 	}
+
 	for _, el := range m.ds {
+		log.Default.Infof("applying migrations on ds: %s", el.Id)
 		el.migrate()
 	}
+
+	log.Default.Info("all migrationed were applied")
 	m.migrated = true
 }
 

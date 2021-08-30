@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/log"
 	"reflect"
 )
 
@@ -70,6 +71,7 @@ func DecodeBytes(data interface{}, dest interface{}) error {
 	dev := gob.NewDecoder(buf)
 	err = dev.Decode(dest)
 	if err != nil {
+		log.Default.Error(err)
 		return errors.Wrap(err, "bytes decoding failed")
 	}
 	return nil

@@ -1,24 +1,36 @@
 package broker
 
 import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"strings"
 )
 
+var (
+	messagesErrors = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "x_broker_errors_total",
+		Help: "The total number of failed broker errors",
+	})
+	messagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "x_broker_messages_total",
+		Help: "The total number of processed broker messages",
+	})
+)
+
 type Message struct {
 	Event string
-	Data []byte
+	Data  []byte
 }
-
 
 type Event struct {
 	Event string
-	Data interface{}
+	Data  interface{}
 }
 
-type Handler  = func(msg Message) interface{}
+type Handler = func(msg Message) interface{}
 
 type Client interface {
 	Start()
@@ -28,17 +40,15 @@ type Client interface {
 	Subscribe(subject string, handler Handler)
 }
 
-
 func NewClient(url string, name string) Client {
 	if strings.HasPrefix(url, "nats://") {
 		return newNatsMessageClient(url, name)
-	}else if url == "mock" {
+	} else if url == "mock" {
 		return NewMockClient(name)
 	}
-	log.Fatal(errors.Errorf("unsupported broker url: %s (try nats:// or mock for tests)", url))
+	log.Default.Fatal(errors.Errorf("unsupported broker url: %s (try nats:// or mock for tests)", url))
 	return nil
 }
-
 
 func (m Message) Decode(dest interface{}) error {
 	return h.DecodeBytes(m.Data, dest)

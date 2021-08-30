@@ -42,7 +42,7 @@ func (f JwtBearerFilter) Handle(c *Context) {
 	if err != nil {
 		c.gin.AbortWithStatusJSON(http.StatusForbidden, h.Map{"message": "INVALID_CREDENTIALS", "error": err.Error()})
 		if err != nil {
-			log.Error(err)
+			log.Default.Error(err)
 		}
 		return
 	}
@@ -75,7 +75,7 @@ func (r *Router) checkSecurityConstraints(route *Route, gc *gin.Context) {
 		if err != nil || principal == nil {
 			c.gin.AbortWithStatusJSON(http.StatusForbidden, h.Map{"message": "INVALID_CREDENTIALS"})
 			if err != nil {
-				log.Error(err)
+				log.Default.Error(err)
 			}
 			return
 		}

@@ -17,13 +17,13 @@ func New() *Container {
 }
 
 func (c *Container) Inject(function interface{})  {
-	log.FatalIf(c.di.Invoke(function))
+	log.Instance.FatalIf(c.di.Invoke(function))
 }
 
 func (c *Container) Provide(constructor interface{}) {
 	mu.Lock()
 	err := c.di.Provide(constructor)
 	mu.Unlock()
-	log.FatalIf(err)
+	log.Instance.FatalIf(err)
 }
 */

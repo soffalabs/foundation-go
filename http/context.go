@@ -76,7 +76,7 @@ func (c *Context) Header(name string) string {
 
 func (c *Context) BindJson(dest interface{}) bool {
 	if err := c.gin.ShouldBind(dest); err != nil {
-		_ = log.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), err)
+		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), err)
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -88,7 +88,7 @@ func (c *Context) BindJson(dest interface{}) bool {
 
 func (c *Context) BindUri(dest interface{}) bool {
 	if err := c.gin.ShouldBindUri(dest); err != nil {
-		_ = log.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), err)
+		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), err)
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -105,7 +105,7 @@ func (c *Context) CheckInputWithRegex(value string, pattern string, errorCode st
 		if err != nil {
 			message = err.Error()
 		}
-		_ = log.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), errors.Errorf(message))
+		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), errors.Errorf(message))
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":    errorCode,
 			"message": message,
@@ -122,7 +122,7 @@ func (c *Context) IsAborted() bool {
 func (c *Context) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := c.gin.Request.BasicAuth()
 	if !hasAuth || h.IsStrEmpty(user) {
-		_ = log.Capture("http.request.unauthorized", errors.Errorf(c.gin.Request.RequestURI))
+		_ = log.Default.Capture("http.request.unauthorized", errors.Errorf(c.gin.Request.RequestURI))
 		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
 		})
@@ -140,7 +140,7 @@ func (c *Context) RequireParam(name string) string {
 	if h.IsStrEmpty(value) {
 
 		message := fmt.Sprintf("Parameter '%s' is missing", name)
-		_ = log.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), errors.Errorf(message))
+		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), errors.Errorf(message))
 
 		c.gin.AbortWithStatusJSON(http.StatusBadRequest, h.Map{
 			"message": message,

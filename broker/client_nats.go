@@ -13,6 +13,7 @@ type NatsMessageClient struct {
 	id   string
 	conn *nats.Conn
 	open bool
+	log *log.Logger
 }
 
 func (n *NatsMessageClient) Ping() error {
@@ -26,6 +27,7 @@ func (n *NatsMessageClient) Start() {
 func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
 	bytes, err := h.GetBytes(data)
 	if err != nil {
+		messagesErrors.Inc()
 		return err
 	}
 	err = n.conn.Publish(subj, bytes)
@@ -34,61 +36,89 @@ func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
 
 func (n *NatsMessageClient) Request(subj string, data interface{}, dest interface{}) error {
 	// bytes, err := prepareMessage(event, payload)
+	n.log.Infof("requesting data from channel :%s", subj)
 	bytes, err := h.GetBytes(data)
 	if err != nil {
+		n.log.Error(err)
+		messagesErrors.Inc()
 		return errors.Wrapf(err, "[nats] bytes encoding failed -- %v", subj, err)
 	}
 	msg, err := n.conn.Request(subj, bytes, 10*time.Second)
 	if err != nil {
+		n.log.Error(err)
+		messagesErrors.Inc()
 		return errors.Wrapf(err, "[nats] error sending message to %s -- %v", subj, err)
 	}
-	log.Infof("[nats] message sent to to %s", subj)
+	n.log.Infof("response received from channel %s", subj)
 	return h.DecodeBytes(msg.Data, dest)
 }
 
 func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
+	
+	loggger := n.log.With("broker.subject", subj)
+
 	_, err := n.conn.Subscribe(subj, func(m *nats.Msg) {
+		defer func() {
+			if err := recover(); err != nil {
+				messagesErrors.Inc()
+				loggger.Wrapf(err.(error), "[nats.%s] panic error received", subj)
+				if m.Reply == "" {
+					_ = m.Respond(nil)
+				}
+				_ = m.Nak()
+			}
+		}()
+
+		loggger.Info("new message received")
+
 		if !n.open {
+			loggger.Warn("sending NACK before application is not yet ready to receive messages")
 			_ = m.Nak()
 			if m.Reply == "" {
 				_ = m.Respond(nil)
 			}
 			return
 		}
-		defer func() {
-			if err := recover(); err != nil {
-				if m.Reply == "" {
-					_ = m.Respond(nil)
-				}
-				_ = m.Nak()
-				log.Error(err)
 
-			}
-		}()
-		if log.IsDebugEnabled() {
-			log.Debugf("[nats] message received %s", subj)
+		if loggger.IsDebugEnabled() {
+			loggger.Debugf("%s", m.Data)
 		}
+
 		bmsg := Message{Data: m.Data}
 		response := handler(bmsg)
 
 		if m.Reply == "" {
+			loggger.Info("no responsed was requested")
 			_ = m.Ack()
+			messagesProcessed.Inc()
 		} else {
 			bytes, err := h.GetBytes(response)
 			if err != nil {
-				log.Error(err)
+				loggger.Wrap(err, "error encoding data to send back")
+				messagesErrors.Inc()
 			} else {
-				_ = m.Respond(bytes)
+				if err = m.Respond(bytes); err != nil {
+					loggger.Wrapf(err, "error sending response to %s", m.Reply)
+					messagesErrors.Inc()
+				}else {
+					loggger.Infof( "data successfully sent back to %s", m.Reply)
+					messagesProcessed.Inc()
+				}
 			}
 		}
 	})
-	log.FatalIf(err)
-	log.Infof("[nats] subscribred to %s", subj)
+	if err != nil {
+		loggger.Fatal("unable to subscribe to subject")
+	}
+	loggger.Info("subscription is active")
 }
 
 func newNatsMessageClient(url string, name string) Client {
+	log.Default.Infof("connecting to nats instance %s", url)
 	nc, err := nats.Connect(url)
-	log.FatalIf(err)
-	log.Infof("[nats] %s is now connected to %s", name, url)
-	return &NatsMessageClient{conn: nc, id: name}
+	if err != nil {
+		log.Default.Fatal(errors.Wrapf(err, "error connecting to nats server: %s", url))
+	}
+	log.Default.Infof("application is now connected to nats server %s", url)
+	return &NatsMessageClient{conn: nc, id: name, log: log.Default.With("broker", "nats", "broker.name", name)}
 }

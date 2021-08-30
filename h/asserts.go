@@ -6,6 +6,6 @@ import (
 
 func AssertNotEmpty(value string, message string) {
 	if IsStrEmpty(value) {
-		log.Fatal(message)
+		log.Default.Fatal(message)
 	}
 }

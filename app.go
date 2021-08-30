@@ -25,10 +25,14 @@ type App struct {
 	onReadyListeners []func()
 	scheduler *Scheduler
 	args      map[string]interface{}
+
 }
 
 func NewApp(cfg *conf.Manager, name string, version string) *App {
 	cfg.Load()
+	if cfg.IsProdEnv() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	a := &App{
 		cfg:       cfg,
 		Name:      name,
@@ -70,6 +74,7 @@ func (a *App) Configure(cb func(router *http.Router, scheduler *Scheduler)) *App
 			Handler: a.handleHealthCheck,
 			Open:    true,
 		})
+
 	}
 	cb(a.router, a.scheduler)
 	return a
@@ -106,16 +111,13 @@ func (a *App) bootstrap() {
 			for _, l := range a.onReadyListeners {
 				l()
 			}
-			log.Info("All on-ready listeneres invoked.")
+			log.Default.Info("All on-ready listeneres invoked.")
 		}()
 	}
 }
 
 func (a *App) Start(port int) {
 	a.bootstrap()
-	if a.cfg.IsProdEnv() {
-		gin.SetMode(gin.ReleaseMode)
-	}
 	a.router.Start(port)
 }
 
@@ -182,6 +184,7 @@ func (a *App) handleHealthCheck(c *http.Context) {
 func (a *App) printHealthCheck() {
 	fmt.Println("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 	fmt.Printf("%s:%s\n", a.Name, a.Version)
+	fmt.Printf("prod:%v\n", a.cfg.IsProdEnv())
 	fmt.Println("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 	fmt.Println("\nHealthchecks: ")
 	allUp, checks := a.getHealthCheck()
@@ -194,7 +197,7 @@ func (a *App) printHealthCheck() {
 		}
 	}
 	if !allUp {
-		_ = log.Capture(fmt.Sprintf("service.start:%s", a.Name), errors.Errorf("some components are not healthy"))
+		_ = log.Default.Capture(fmt.Sprintf("service.start:%s", a.Name), errors.Errorf("some components are not healthy"))
 	}
 	fmt.Printf("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n")
 
@@ -214,7 +217,7 @@ type Scheduler struct {
 func (s *Scheduler) Start() {
 	if !s.empty {
 		s.s.StartAsync()
-		log.Info("Job secheduler is started.")
+		log.Default.Info("Job secheduler is started.")
 	}
 }
 
@@ -222,12 +225,12 @@ func (s *Scheduler) Every(interval string, task func()) {
 	_, err := s.s.Every(interval).Do(func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Error("critital error from task execution -- %v", r)
+				log.Default.Error("critital error from task execution -- %v", r)
 			}
 		}()
 		task()
 	})
-	log.FatalIf(err)
+	log.Default.FatalIf(err)
 	s.empty = false
 
 }

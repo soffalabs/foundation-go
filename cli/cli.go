@@ -34,13 +34,13 @@ func createServerCmd(createApp func(env string) *soffa.App) *cobra.Command {
 			if dbMigrations {
 				app.MigrateDB()
 			} else {
-				log.Info("database migrations were skipped")
+				log.Default.Info("database migrations were skipped")
 			}
 			if randomPort {
 				addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
-				log.FatalIf(err)
+				log.Default.FatalIf(err)
 				l, err := net.ListenTCP("tcp", addr)
-				log.FatalIf(err)
+				log.Default.FatalIf(err)
 				defer func(l *net.TCPListener) {
 					_ = l.Close()
 				}(l)

@@ -32,16 +32,22 @@ func (ds *DS) migrate() {
 
 func (ds *DS) migrateSchema(schema string) {
 	if ds.Migrations == nil {
-		log.Warn("[%s] no migrations found to apply.", ds.Id)
+		log.Default.Warn("[%s] no migrations found to apply.", ds.Id)
 		return
 	}
 	if !h.IsEmpty(schema) {
+		log.Default.Infof("migrating schema %s", schema)
 		ds.internalMigrations(ds.Migrations, schema)
 	} else if ds.TenantsLoader != nil {
-		log.Info("Multitenant datasource found, scanning all schemas")
+		log.Default.Info("multitenant datasource found, scanning all schemas")
 		items := ds.TenantsLoader()
-		for _, sc := range items {
-			ds.internalMigrations(ds.Migrations, sc)
+		if items == nil || len(items) ==0 {
+			log.Default.Warn("empty tenants list received, skipping migrations")
+		} else {
+			for _, sc := range items {
+				log.Default.Infof("applying migrations on schema %s", sc)
+				ds.internalMigrations(ds.Migrations, sc)
+			}
 		}
 	} else {
 		ds.internalMigrations(ds.Migrations, "")
@@ -69,7 +75,7 @@ func (ds *DS) internalMigrations(migrations []*gormigrate.Migration, schema stri
 		}, migrations)
 
 		errors.Raise(m.Migrate())
-		log.Infof("[%s] migrations applied successfully", ds.Id)
+		log.Default.Infof("[%s] migrations applied successfully", ds.Id)
 	})
 
 }

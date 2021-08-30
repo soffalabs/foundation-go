@@ -41,7 +41,7 @@ func (m *Manager) IsTestEnv() bool {
 
 func (m *Manager) UseVault(url string) {
 	if h.IsEmpty(url) {
-		log.Fatal("Unable to locate vault url: env.VAULT_URL, env.VAULT_ADDR")
+		log.Default.Fatal("Unable to locate vault url: env.VAULT_URL, env.VAULT_ADDR")
 	}
 	m.vaultUrl = url
 	m.vaultToken = os.Getenv("VAULT_TOKEN")
@@ -56,7 +56,7 @@ func (m *Manager) Load() {
 	filenames := []string{fmt.Sprintf(".env.%s", strings.ToLower(m.env)), ".env"}
 	for _, f := range filenames {
 		if err := godotenv.Load(f); err == nil {
-			log.Infof("%s file loaded", f)
+			log.Default.Infof("%s file loaded", f)
 		}
 	}
 
@@ -72,30 +72,30 @@ func (m *Manager) Load() {
 	if logLevel == "" {
 		logLevel = "INFO"
 	}
-	log.Init(logLevel)
+	log.Default.SetLevel(logLevel)
 
 	if h.IsStrEmpty(m.vaultUrl) {
-		log.Info("VaultUrl is empty skipping.")
+		log.Default.Info("VaultUrl is empty skipping.")
 	} else {
-		log.Infof("Loading config from vault: %s", m.vaultUrl)
+		log.Default.Infof("Loading config from vault: %s", m.vaultUrl)
 		data, err := h.ReadVaultSecret(m.vaultUrl, m.vaultToken)
 		if err != nil {
-			log.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)
+			log.Default.Fatalf("Error starting service, failed to read secrets from vault.\n%v", err)
 		} else {
 			flat, err := flatten.Flatten(data, "", flatten.DotStyle)
-			log.FatalIf(err)
+			log.Default.FatalIf(err)
 			m.vaultData = flat
 		}
 	}
 
 	m.loaded = true
-	log.Debug("Config manager loaded.")
+	log.Default.Debug("Config manager loaded.")
 }
 
 func (m *Manager) Require(paths ...string) string {
 	value := m.Get(paths...)
 	if h.IsEmpty(value) {
-		log.Fatal("[config] unable to locate one of: %v", strings.Join(paths, ","))
+		log.Default.Fatalf("[config] unable to locate one of: %s", strings.Join(paths, ","))
 	}
 	return value
 }

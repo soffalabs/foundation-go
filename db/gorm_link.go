@@ -84,7 +84,7 @@ func (ds *GormLink) CreateSchema(name string) error {
 				return result.Error
 			}
 		} else {
-			log.Warnf("Schema creation not supported by: %s", dialect)
+			log.Default.Warnf("Schema creation not supported by: %s", dialect)
 		}
 		return nil
 	})
