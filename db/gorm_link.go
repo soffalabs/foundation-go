@@ -7,7 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 type GormLink struct {
 	BaseLink
 	conn   *gorm.DB
@@ -15,69 +14,69 @@ type GormLink struct {
 	tenant string
 }
 
-func (ds *GormLink) MigrateTenant(schema string)  {
-	 ds.ds.migrateSchema(schema)
+func (link *GormLink) MigrateTenant(schema string) {
+	link.ds.migrateSchema(schema)
 }
 
-func (ds *GormLink) Migrate()  {
-	 ds.ds.migrate()
+func (link *GormLink) Migrate() {
+	link.ds.migrate()
 }
 
-func (ds *GormLink) WithTenant(tenant string) BaseLink {
+func (link *GormLink) WithTenant(tenant string) BaseLink {
 	return &GormLink{
-		conn:   ds.conn,
-		ds:     ds.ds,
+		conn:   link.conn,
+		ds:     link.ds,
 		tenant: tenant,
 	}
 }
 
-func (ds *GormLink) Ping() error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Ping() error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Exec("SELECT 1").Error
 	})
 
 }
 
-func (ds *GormLink) Create(model interface{}) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Create(model interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Create(model).Error
 	})
 }
 
-func (ds *GormLink) Save(model interface{}) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Save(model interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Save(model).Error
 	})
 }
 
-func (ds *GormLink) Exec(command string) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Exec(command string) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Exec(command).Error
 	})
 }
 
-func (ds *GormLink) First(model interface{}) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) First(model interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.First(model).Error
 	})
 }
 
-func (ds *GormLink) Pluck(table interface{}, column string, dest interface{}) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Pluck(table interface{}, column string, dest interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Model(table).Pluck(column, dest).Error
 	})
 }
 
-func (ds *GormLink) Count(model interface{}) (int64, error) {
+func (link *GormLink) Count(model interface{}) (int64, error) {
 	var count int64 = 0
-	err := ds.withConn(func(conn *gorm.DB) error {
+	err := link.withConn(func(conn *gorm.DB) error {
 		return conn.Model(model).Count(&count).Error
 	})
 	return count, err
 }
 
-func (ds *GormLink) CreateSchema(name string) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) CreateSchema(name string) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		dialect := conn.Dialector.Name()
 		if "postgres" == dialect {
 			if result := conn.Exec(fmt.Sprintf("CREATE SCHEMA %s", name)); result.Error != nil {
@@ -90,24 +89,24 @@ func (ds *GormLink) CreateSchema(name string) error {
 	})
 }
 
-func (ds *GormLink) Transactional(callback func(link BaseLink) error) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Transactional(callback func(link BaseLink) error) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Transaction(func(tx *gorm.DB) error {
-			link := &GormLink{conn: tx, ds: ds.ds}
+			link := &GormLink{conn: tx, ds: link.ds}
 			return callback(link)
 		})
 	})
 }
 
-func (ds *GormLink) Find(dest interface{}, query Query) Result {
+func (link *GormLink) Find(dest interface{}, query Query) Result {
 
 	res := &Result{}
 
-	res.Error = ds.withConn(func(conn *gorm.DB) error {
+	res.Error = link.withConn(func(conn *gorm.DB) error {
 		exec := conn.Offset(query.offset).Limit(query.limit).Order(query.sort)
 		if query.whereMap != nil {
 			exec = exec.Where(h.UnwrapMap(*query.whereMap))
-		}else if !h.IsEmpty(query.where) {
+		} else if !h.IsEmpty(query.where) {
 			exec = exec.Where(query.where, query.args...)
 		}
 		out := exec.Find(dest)
@@ -128,19 +127,19 @@ func (ds *GormLink) Find(dest interface{}, query Query) Result {
 	return *res
 }
 
-func (ds *GormLink) Truncate(model interface{}) error {
-	return ds.withConn(func(conn *gorm.DB) error {
+func (link *GormLink) Truncate(model interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Delete(model, "1=1").Error
 	})
 }
 
-func (ds *GormLink) ExistsById(model interface{}, id string) (bool, error) {
-	return ds.ExistsBy(model, "id = ?", id)
+func (link *GormLink) ExistsById(model interface{}, id string) (bool, error) {
+	return link.ExistsBy(model, "id = ?", id)
 }
 
-func (ds *GormLink) ExistsBy(model interface{}, where string, args ...interface{}) (bool, error) {
+func (link *GormLink) ExistsBy(model interface{}, where string, args ...interface{}) (bool, error) {
 	var out = false
-	err := ds.withConn(func(conn *gorm.DB) error {
+	err := link.withConn(func(conn *gorm.DB) error {
 		var count int64
 		if res := conn.Model(model).Where(where, args...).Count(&count); res.Error != nil {
 			return res.Error
@@ -151,23 +150,23 @@ func (ds *GormLink) ExistsBy(model interface{}, where string, args ...interface{
 	return out, err
 }
 
-func (ds *GormLink) UseSchema(name string) error {
-	if !ds.supportsSchemas() {
+func (link *GormLink) UseSchema(name string) error {
+	if !link.supportsSchemas() {
 		return nil
 	}
-	if res := ds.conn.Exec(fmt.Sprintf("SET search_path to %s", name)); res.Error != nil {
+	if res := link.conn.Exec(fmt.Sprintf("SET search_path to %s", name)); res.Error != nil {
 		return res.Error
 	}
 	return nil
 }
 
-func (ds *GormLink) supportsSchemas() bool {
-	return ds.conn.Dialector.Name() != "sqlite"
+func (link *GormLink) supportsSchemas() bool {
+	return link.conn.Dialector.Name() != "sqlite"
 }
 
-func (ds *GormLink) createSchemas(names ...string) error {
+func (link *GormLink) createSchemas(names ...string) error {
 	for _, name := range names {
-		if res := ds.conn.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", name)); res.Error != nil {
+		if res := link.conn.Exec(fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", name)); res.Error != nil {
 			return res.Error
 		}
 	}
@@ -175,25 +174,31 @@ func (ds *GormLink) createSchemas(names ...string) error {
 
 }
 
-
 // ------------------------------------------------------------------------------------------------
 
-func (ds *GormLink) withConn(cb func(tx *gorm.DB) error) error {
-	if h.IsEmpty(ds.tenant) {
-		return cb(ds.conn)
-	}
-	_, exists := ds.conn.Get("tenant_active")
-	if exists {
-		return cb(ds.conn)
-	}
-	return ds.conn.Transaction(func(tx *gorm.DB) error {
-		tx.Set("tenant_active", true)
-		if ds.supportsSchemas() {
-			if res := tx.Exec(fmt.Sprintf("SET search_path to %s", ds.tenant)); res.Error != nil {
-				return res.Error
-			}
+func (link *GormLink) withConn(cb func(tx *gorm.DB) error) error {
+	var err error
+	if h.IsEmpty(link.tenant) {
+		err = cb(link.conn)
+	} else {
+		_, exists := link.conn.Get("tenant_active")
+		if exists {
+			err = cb(link.conn)
+		} else {
+			err = link.conn.Transaction(func(tx *gorm.DB) error {
+				tx.Set("tenant_active", true)
+				if link.supportsSchemas() {
+					if res := tx.Exec(fmt.Sprintf("SET search_path to %s", link.tenant)); res.Error != nil {
+						return res.Error
+					}
+				}
+				return cb(tx)
+			})
 		}
-		return cb(tx)
-	})
-}
+	}
+	if err != nil {
+		log.Default.With("tenant", link.tenant).Error(err)
+	}
+	return err
 
+}
