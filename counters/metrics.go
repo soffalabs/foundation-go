@@ -1,36 +1,107 @@
 package counters
 
-import "sync/atomic"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/soffa-io/soffa-core-go/conf"
+	"sync/atomic"
+)
 
 type Counter struct {
-	Total    int32
-	Success  int32
-	Failures int32
+	ok      int32
+	err     int32
+	code    string
+	desc    string
+	pmTotal  prometheus.Counter
+	pmErr prometheus.Counter
+	export bool
+}
+
+var (
+	__registry = map[string]*Counter{}
+)
+
+func NewCounter(code string, desc string, export bool) *Counter {
+	if counter, ok := __registry[code]; ok {
+		return counter
+	}
+	counter := &Counter{
+		code: code,
+		desc: desc,
+		export: export,
+	}
+	__registry[code] = counter
+	return counter
+}
+
+func (a *Counter) Record(err error) {
+	if err == nil {
+		a.Inc()
+	} else {
+		a.Err()
+	}
+}
+
+func (a *Counter) Reset() {
+	atomic.StoreInt32(&a.ok, 0)
+	atomic.StoreInt32(&a.err, 0)
+}
+
+func (a *Counter) Watch(cb func() error) error {
+	err := cb()
+	a.Record(err)
+	return err
 }
 
 func (a *Counter) Inc() {
-	atomic.AddInt32(&a.Total, 1)
-}
-
-func (a *Counter) OK() {
-	atomic.AddInt32(&a.Success, 1)
-	atomic.AddInt32(&a.Total, 1)
-}
-
-func (a *Counter) KO() {
-	atomic.AddInt32(&a.Failures, 1)
-	atomic.AddInt32(&a.Total, 1)
-}
-
-func (a *Counter) CaptureFn(fn func() error) error {
-	return a.Record(fn())
-}
-
-func (a *Counter) Record(err error) error {
-	if err != nil {
-		a.KO()
-	} else {
-		a.OK()
+	if a.export {
+		if a.pmTotal == nil && conf.PrometheusEnabled {
+			a.pmTotal = promauto.NewCounter(prometheus.CounterOpts{
+				Name: a.code,
+				Help: a.desc,
+			})
+		}
+		if a.pmTotal != nil {
+			a.pmTotal.Inc()
+		}
 	}
-	return err
+	atomic.AddInt32(&a.ok, 1)
+}
+
+func (a *Counter) Err() {
+	if a.export {
+		if a.pmErr == nil && conf.PrometheusEnabled {
+			a.pmErr = promauto.NewCounter(prometheus.CounterOpts{
+				Name: a.code + "_errors",
+				Help: a.desc,
+			})
+		}
+		if a.pmErr != nil {
+			a.pmErr.Inc()
+		}
+	}
+	atomic.AddInt32(&a.err, 1)
+}
+
+func (a *Counter) Success() int32 {
+	return a.ok
+}
+
+func (a *Counter) Errors() int32 {
+	return a.err
+}
+
+func (a *Counter) Total() int32 {
+	return a.err + a.ok
+}
+
+func (a *Counter) Recover(rec interface{}, rethrow bool) {
+	if rec == nil {
+		a.Inc()
+	}else {
+		a.Err()
+		if rethrow {
+			panic(rec)
+		}
+	}
 }

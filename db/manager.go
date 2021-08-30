@@ -4,17 +4,22 @@ import (
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
+	"regexp"
 )
 
 type Manager struct {
 	ds map[string]*DS
 	migrated bool
+	serviceName string
 }
 
-func NewManager() *Manager {
+func NewManager(serviceName string) *Manager {
+	re := regexp.MustCompile("[^a-zA-Z0-9_]")
+	serviceName = re.ReplaceAllString(serviceName, "_")
 	return &Manager{
 		ds: map[string]*DS{},
 		migrated: false,
+		serviceName: serviceName,
 	}
 }
 
@@ -29,6 +34,7 @@ func (m *Manager) Add(ds DS) *Link  {
 	if h.IsStrEmpty(ds.Url) {
 		log.Default.Fatal("Database url cannot be empty")
 	}
+	ds.serviceName = m.serviceName
 	ds.bootstrap()
 	m.ds[ds.Id] = &ds
 	return ds.link
@@ -93,16 +99,3 @@ func (m *Manager) IsEmpty() bool {
 func (m *Manager) Size() int {
 	return len(m.ds)
 }
-
-/*
-func (m *Manager) WithTenantLink(tenant string, fn func(conn Link)) error {
-	conn, err := m.GetLink()
-	if err != nil {
-		return err
-	}
-	return conn.Tenant(tenant, func(conn Link) error {
-		fn(conn)
-		return nil
-	})
-}
-*/

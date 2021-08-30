@@ -13,7 +13,7 @@ type NatsMessageClient struct {
 	id   string
 	conn *nats.Conn
 	open bool
-	log *log.Logger
+	log  *log.Logger
 }
 
 func (n *NatsMessageClient) Ping() error {
@@ -25,43 +25,45 @@ func (n *NatsMessageClient) Start() {
 }
 
 func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
-	bytes, err := h.GetBytes(data)
-	if err != nil {
-		messagesErrors.Inc()
-		return err
-	}
-	err = n.conn.Publish(subj, bytes)
-	return err
+	return SendMessageCounter.Watch(func() error {
+		if bytes, err := h.GetBytes(data); err != nil {
+			return err
+		}else {
+			return n.conn.Publish(subj, bytes)
+		}
+	})
 }
 
 func (n *NatsMessageClient) Request(subj string, data interface{}, dest interface{}) error {
-	// bytes, err := prepareMessage(event, payload)
-	n.log.Infof("requesting data from channel :%s", subj)
-	bytes, err := h.GetBytes(data)
-	if err != nil {
-		n.log.Error(err)
-		messagesErrors.Inc()
-		return errors.Wrapf(err, "[nats] bytes encoding failed -- %v", subj, err)
-	}
-	msg, err := n.conn.Request(subj, bytes, 10*time.Second)
-	if err != nil {
-		n.log.Error(err)
-		messagesErrors.Inc()
-		return errors.Wrapf(err, "[nats] error sending message to %s -- %v", subj, err)
-	}
-	n.log.Infof("response received from channel %s", subj)
-	return h.DecodeBytes(msg.Data, dest)
+	return SendMessageCounter.Watch(func() error {
+		// bytes, err := prepareMessage(event, payload)
+		n.log.Infof("requesting data from channel :%s", subj)
+		bytes, err := h.GetBytes(data)
+		if err != nil {
+			n.log.Error(err)
+			return errors.Wrapf(err, "[nats] bytes encoding failed -- %v", subj, err)
+		}
+		msg, err := n.conn.Request(subj, bytes, 10*time.Second)
+		if err != nil {
+			n.log.Error(err)
+			return errors.Wrapf(err, "[nats] error sending message to %s -- %v", subj, err)
+		}
+		n.log.Infof("response received from channel %s", subj)
+		return h.DecodeBytes(msg.Data, dest)
+	})
 }
 
 func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
-	
+
 	loggger := n.log.With("broker.subject", subj)
 
 	_, err := n.conn.Subscribe(subj, func(m *nats.Msg) {
 		defer func() {
-			if err := recover(); err != nil {
-				messagesErrors.Inc()
-				loggger.Wrapf(err.(error), "[nats.%s] panic error received", subj)
+			re := recover()
+			MessageHandleCounter.Recover(re, false)
+
+			if re != nil {
+				loggger.Wrapf(re.(error), "[nats.%s] panic error received", subj)
 				if m.Reply == "" {
 					_ = m.Respond(nil)
 				}
@@ -88,21 +90,18 @@ func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
 		response := handler(bmsg)
 
 		if m.Reply == "" {
-			loggger.Info("no responsed was requested")
 			_ = m.Ack()
-			messagesProcessed.Inc()
 		} else {
 			bytes, err := h.GetBytes(response)
 			if err != nil {
 				loggger.Wrap(err, "error encoding data to send back")
-				messagesErrors.Inc()
+				SendMessageCounter.Inc()
 			} else {
 				if err = m.Respond(bytes); err != nil {
 					loggger.Wrapf(err, "error sending response to %s", m.Reply)
-					messagesErrors.Inc()
-				}else {
-					loggger.Infof( "data successfully sent back to %s", m.Reply)
-					messagesProcessed.Inc()
+					SendMessageCounter.Inc()
+				} else {
+					loggger.Infof("data successfully sent back to %s", m.Reply)
 				}
 			}
 		}

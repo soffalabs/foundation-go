@@ -4,6 +4,8 @@ import (
 	"github.com/soffa-io/soffa-core-go/errors"
 )
 
+
+
 type TenantsLoader = func() []string
 
 type BaseLink interface {
@@ -28,6 +30,7 @@ type BaseLink interface {
 }
 
 type Link struct {
+	ds *DS
 	base BaseLink
 }
 
@@ -111,11 +114,11 @@ func (l *Link) createSchemas(schemas ...string) {
 
 func (l *Link) Transactional(callback func(link *Link)) {
 	errors.Raise(l.base.Transactional(func(link BaseLink) error {
-		callback(&Link{link})
+		callback(&Link{ds: l.ds, base: link})
 		return nil
 	}))
 }
 
 func (l *Link) Tenant(tenant string) *Link {
-	return &Link{l.base.WithTenant(tenant)}
+	return &Link{ds:l.ds, base: l.base.WithTenant(tenant)}
 }

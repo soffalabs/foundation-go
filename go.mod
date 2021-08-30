@@ -15,7 +15,7 @@ require (
 	github.com/joho/godotenv v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect
 	github.com/nats-io/nats.go v1.12.0
-	github.com/prometheus/client_golang v1.4.0
+	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/xid v1.3.0
 	github.com/spf13/cobra v0.0.3
 	github.com/stretchr/testify v1.7.0
@@ -29,4 +29,5 @@ require (
 	gorm.io/driver/postgres v1.1.0
 	gorm.io/driver/sqlite v1.1.4
 	gorm.io/gorm v1.21.13
+	gorm.io/plugin/prometheus v0.0.0-20210820101226-2a49866f83ee
 )

@@ -196,6 +196,7 @@ func (link *GormLink) withConn(cb func(tx *gorm.DB) error) error {
 			})
 		}
 	}
+	link.ds.counterOperations.Record(err)
 	if err != nil {
 		log.Default.With("tenant", link.tenant).Error(err)
 	}

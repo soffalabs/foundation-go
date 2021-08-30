@@ -34,46 +34,52 @@ func (n *FakeRpcClient) getFn(subj string) func(interface{}) (interface{}, error
 
 //goland:noinspection GoDeferInLoop
 func (n *FakeRpcClient) Publish(subj string, data interface{}) error {
-	fn := n.getFn(subj)
-	if fn != nil {
-		defer func() {
-			_, _ = fn(data)
-		}()
-		return nil
-	}
-	return errors.Errorf("subject not found: %s", subj)
+	return SendMessageCounter.Watch(func() error {
+		fn := n.getFn(subj)
+		if fn != nil {
+			defer func() {
+				_, _ = fn(data)
+			}()
+			return nil
+		}
+		return errors.Errorf("subject not found: %s", subj)
+	})
 }
 
 func (n *FakeRpcClient) Request(subj string, data interface{}, dest interface{}) error {
-	// bytes, err := prepareMessage(event, payload)
-	bytes, err := h.GetBytes(data)
-	if err != nil {
-		return errors.Wrapf(err, "[fake.rpc] bytes encoding failed -- %v", subj, err)
-	}
+	return SendMessageCounter.Watch(func() error {
+		// bytes, err := prepareMessage(event, payload)
+		bytes, err := h.GetBytes(data)
+		if err != nil {
+			return errors.Wrapf(err, "[fake.rpc] bytes encoding failed -- %v", subj, err)
+		}
 
-	fn := n.getFn(subj)
-	if fn == nil {
-		return errors.Errorf("subject not found: %s", subj)
-	}
+		fn := n.getFn(subj)
+		if fn == nil {
+			return errors.Errorf("subject not found: %s", subj)
+		}
 
-	result, err := fn(bytes)
-	if err != nil {
-		return errors.Wrapf(err, "[fake.rpc] error sending message to %s -- %v", subj, err)
-	}
+		result, err := fn(bytes)
+		if err != nil {
+			return errors.Wrapf(err, "[fake.rpc] error sending message to %s -- %v", subj, err)
+		}
 
-	log.Default.Infof("[fake.rpc] message sent to to %s", subj)
+		log.Default.Infof("[fake.rpc] message sent to to %s", subj)
 
-	if result == nil {
-		return nil
-	}
-	return h.DecodeBytes(result, dest)
+		if result == nil {
+			return nil
+		}
+		return h.DecodeBytes(result, dest)
+	})
 }
 
 func (n *FakeRpcClient) Subscribe(subj string, handler Handler) {
 	n.subjects[subj] = func(data interface{}) (interface{}, error) {
 		defer func() {
-			if err := recover(); err != nil {
-				log.Default.Errorf( "message handling failed [%s] -- %s", subj, err.(error).Error())
+			re := recover()
+			MessageHandleCounter.Recover(re, false)
+			if re != nil {
+				log.Default.Errorf( "message handling failed [%s] -- %s", subj, re.(error).Error())
 			}
 		}()
 		bytes, err := h.GetBytes(data)

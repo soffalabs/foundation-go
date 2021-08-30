@@ -1,8 +1,7 @@
 package broker
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/soffa-io/soffa-core-go/counters"
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
@@ -10,14 +9,8 @@ import (
 )
 
 var (
-	messagesErrors = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "x_broker_errors_total",
-		Help: "The total number of failed broker errors",
-	})
-	messagesProcessed = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "x_broker_messages_total",
-		Help: "The total number of processed broker messages",
-	})
+	SendMessageCounter   = counters.NewCounter("x_sys_broker_send_message", "Will track messages sent", true)
+	MessageHandleCounter = counters.NewCounter("x_sys_broker_handle_message", "Will track messages received", true)
 )
 
 type Message struct {
@@ -56,10 +49,6 @@ func (m Message) Decode(dest interface{}) error {
 
 type Manager struct {
 	client Client
-}
-
-func NewClientWrapper(client Client) Manager {
-	return Manager{client: client}
 }
 
 func (c Manager) Subscribe(event string, handler Handler) Manager {

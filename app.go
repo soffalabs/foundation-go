@@ -23,9 +23,8 @@ type App struct {
 	dbManager        *db.Manager
 	broker           broker.Client
 	onReadyListeners []func()
-	scheduler *Scheduler
-	args      map[string]interface{}
-
+	scheduler        *Scheduler
+	args             map[string]interface{}
 }
 
 func NewApp(cfg *conf.Manager, name string, version string) *App {
@@ -43,14 +42,14 @@ func NewApp(cfg *conf.Manager, name string, version string) *App {
 	return a
 }
 
-func (a *App) SetArg(key string, value interface{}) *App{
+func (a *App) SetArg(key string, value interface{}) *App {
 	a.args[key] = value
 	return a
 }
 
 func (a *App) UseDB(cb func(m *db.Manager)) *App {
 	if a.dbManager == nil {
-		a.dbManager = db.NewManager()
+		a.dbManager = db.NewManager(a.Name)
 	}
 	cb(a.dbManager)
 	return a
@@ -80,7 +79,6 @@ func (a *App) Configure(cb func(router *http.Router, scheduler *Scheduler)) *App
 	return a
 }
 
-
 func (a *App) AddStartupListener(fn func()) *App {
 	if a.onReadyListeners == nil {
 		a.onReadyListeners = []func(){}
@@ -97,7 +95,7 @@ func (a *App) MigrateDB() {
 
 func (a *App) bootstrap() {
 	a.printHealthCheck()
-	if a.broker != nil  {
+	if a.broker != nil {
 		a.broker.Start()
 	}
 	if a.dbManager != nil {
@@ -107,10 +105,11 @@ func (a *App) bootstrap() {
 		a.scheduler.Start()
 	}
 	if a.onReadyListeners != nil {
-		defer func() {
+		go func() {
 			for _, l := range a.onReadyListeners {
 				l()
 			}
+			conf.PrometheusEnabled = true
 			log.Default.Info("All on-ready listeneres invoked.")
 		}()
 	}
@@ -203,10 +202,9 @@ func (a *App) printHealthCheck() {
 
 }
 
-func (a *App) Arg(key string) interface{}{
+func (a *App) Arg(key string) interface{} {
 	return a.args[key]
 }
-
 
 type Scheduler struct {
 	app   *App
