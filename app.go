@@ -2,6 +2,7 @@ package soffa
 
 import (
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -112,6 +113,9 @@ func (a *App) bootstrap() {
 
 func (a *App) Start(port int) {
 	a.bootstrap()
+	if a.cfg.IsProdEnv() {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	a.router.Start(port)
 }
 
