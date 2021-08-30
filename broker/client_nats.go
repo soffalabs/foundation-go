@@ -12,10 +12,15 @@ type NatsMessageClient struct {
 	Client
 	id   string
 	conn *nats.Conn
+	open bool
 }
 
 func (n *NatsMessageClient) Ping() error {
 	return nil
+}
+
+func (n *NatsMessageClient) Start() {
+	n.open = true
 }
 
 func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
@@ -43,11 +48,21 @@ func (n *NatsMessageClient) Request(subj string, data interface{}, dest interfac
 
 func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
 	_, err := n.conn.Subscribe(subj, func(m *nats.Msg) {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Error(r)
+		if !n.open {
+			_ = m.Nak()
+			if m.Reply == "" {
 				_ = m.Respond(nil)
+			}
+			return
+		}
+		defer func() {
+			if err := recover(); err != nil {
+				if m.Reply == "" {
+					_ = m.Respond(nil)
+				}
 				_ = m.Nak()
+				log.Error(err)
+
 			}
 		}()
 		if log.IsDebugEnabled() {
@@ -60,8 +75,11 @@ func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
 			_ = m.Ack()
 		} else {
 			bytes, err := h.GetBytes(response)
-			errors.Raise(err)
-			errors.Raise(m.Respond(bytes))
+			if err != nil {
+				log.Error(err)
+			} else {
+				_ = m.Respond(bytes)
+			}
 		}
 	})
 	log.FatalIf(err)

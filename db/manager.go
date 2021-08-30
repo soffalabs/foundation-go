@@ -8,11 +8,13 @@ import (
 
 type Manager struct {
 	ds map[string]*DS
+	migrated bool
 }
 
 func NewManager() *Manager {
 	return &Manager{
 		ds: map[string]*DS{},
+		migrated: false,
 	}
 }
 
@@ -33,12 +35,13 @@ func (m *Manager) Add(ds DS) *Link  {
 }
 
 func (m *Manager) Migrate() {
-	if m.IsEmpty() {
+	if m.IsEmpty()  || m.migrated {
 		return
 	}
 	for _, el := range m.ds {
 		el.migrate()
 	}
+	m.migrated = true
 }
 
 func (m *Manager) Get(id string) *Link {

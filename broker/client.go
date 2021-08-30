@@ -21,6 +21,7 @@ type Event struct {
 type Handler  = func(msg Message) interface{}
 
 type Client interface {
+	Start()
 	Ping() error
 	Publish(subject string, data interface{}) error
 	Request(subject string, data interface{}, dest interface{}) error

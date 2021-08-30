@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 )
 
 type Tester struct {
@@ -22,9 +21,7 @@ type Tester struct {
 }
 
 func NewTester(t *testing.T, app *App) Tester {
-	app.MigrateDB()
-	time.Sleep(1 * time.Second)
-	app.postStart()
+	app.bootstrap()
 	server := httptest.NewServer(app.router.HttpHandler())
 	return Tester{
 		app:    app,

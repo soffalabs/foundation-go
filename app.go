@@ -74,11 +74,6 @@ func (a *App) Configure(cb func(router *http.Router, scheduler *Scheduler)) *App
 	return a
 }
 
-func (a *App) MigrateDB() {
-	if a.dbManager != nil {
-		a.dbManager.Migrate()
-	}
-}
 
 func (a *App) AddStartupListener(fn func()) *App {
 	if a.onReadyListeners == nil {
@@ -88,8 +83,23 @@ func (a *App) AddStartupListener(fn func()) *App {
 	return a
 }
 
-func (a *App) postStart() {
+func (a *App) MigrateDB() {
+	if a.dbManager != nil {
+		a.dbManager.Migrate()
+	}
+}
 
+func (a *App) bootstrap() {
+	a.printHealthCheck()
+	if a.broker != nil  {
+		a.broker.Start()
+	}
+	if a.dbManager != nil {
+		a.dbManager.Migrate()
+	}
+	if a.scheduler != nil {
+		a.scheduler.Start()
+	}
 	if a.onReadyListeners != nil {
 		defer func() {
 			for _, l := range a.onReadyListeners {
@@ -98,14 +108,10 @@ func (a *App) postStart() {
 			log.Info("All on-ready listeneres invoked.")
 		}()
 	}
-	if a.scheduler != nil {
-		a.scheduler.Start()
-	}
 }
 
 func (a *App) Start(port int) {
-	a.printHealthCheck()
-	a.postStart()
+	a.bootstrap()
 	a.router.Start(port)
 }
 

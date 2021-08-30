@@ -46,13 +46,13 @@ func GetBytes(data interface{}) ([]byte, error) {
 	if IsNil(data) {
 		return nil, nil
 	}
-	var buf bytes.Buffer
-	enc := gob.NewEncoder(&buf)
-	err := enc.Encode(data)
+	b := bytes.Buffer{}
+	e := gob.NewEncoder(&b)
+	err := e.Encode(data)
 	if err != nil {
 		return nil, errors.Wrap(err, "bytes encoding failed")
 	}
-	return buf.Bytes(), nil
+	return b.Bytes(), nil
 }
 
 func DecodeBytes(data interface{}, dest interface{}) error {

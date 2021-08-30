@@ -16,6 +16,9 @@ type FakeRpcClient struct {
 	subjects map[string]func(interface{}) (interface{}, error)
 }
 
+func (n *FakeRpcClient) Start()  {
+}
+
 func (n *FakeRpcClient) Ping() error {
 	return nil
 }
