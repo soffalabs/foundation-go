@@ -5,6 +5,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
+	"github.com/soffa-io/soffa-core-go/sentry"
 	"time"
 )
 
@@ -51,7 +52,7 @@ func NewHttpClient(debug bool) Client {
 	}
 }
 
-func (c Response) Decode(dest interface{}) error {
+func (c Response) DecodeJson(dest interface{}) error {
 	return h.FromJson(c.Body, dest)
 }
 
@@ -130,11 +131,14 @@ func (c DefaultHttpClient) Delete(url string, body interface{}, headers *Headers
 func parseResponse(resp *resty.Response, err error) (Response, error) {
 
 	if err != nil {
+		sentry.CaptureException(err)
 		return Response{}, err
 	}
 
 	if resp.IsError() {
 		err = errors.Errorf("%s", resp.Body())
+		sentry.CaptureException(err)
+
 	}
 
 	return Response{

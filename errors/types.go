@@ -1,8 +1,11 @@
 package errors
 
+const (
+	ErrNotFoundCode = "F404"
+)
 
 type ErrFunctional struct {
-	Code    string `json:"code"`
+	Code string `json:"code"`
 }
 
 func (e ErrFunctional) Error() string {
@@ -10,7 +13,7 @@ func (e ErrFunctional) Error() string {
 }
 
 type ErrTechnical struct {
-	Code    string `json:"code"`
+	Code string `json:"code"`
 }
 
 func (e ErrTechnical) Error() string {

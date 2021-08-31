@@ -5,6 +5,7 @@ import (
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
+	"github.com/soffa-io/soffa-core-go/sentry"
 	"time"
 )
 
@@ -25,17 +26,19 @@ func (n *NatsMessageClient) Start() {
 }
 
 func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
-	return SendMessageCounter.Watch(func() error {
+	err := SendMessageCounter.Watch(func() error {
 		if bytes, err := h.GetBytes(data); err != nil {
 			return err
 		}else {
 			return n.conn.Publish(subj, bytes)
 		}
 	})
+	sentry.CaptureException(err)
+	return err
 }
 
 func (n *NatsMessageClient) Request(subj string, data interface{}, dest interface{}) error {
-	return SendMessageCounter.Watch(func() error {
+	err := SendMessageCounter.Watch(func() error {
 		// bytes, err := prepareMessage(event, payload)
 		n.log.Infof("requesting data from channel :%s", subj)
 		bytes, err := h.GetBytes(data)
@@ -51,6 +54,8 @@ func (n *NatsMessageClient) Request(subj string, data interface{}, dest interfac
 		n.log.Infof("response received from channel %s", subj)
 		return h.DecodeBytes(msg.Data, dest)
 	})
+	sentry.CaptureException(err)
+	return err
 }
 
 func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
@@ -60,9 +65,11 @@ func (n *NatsMessageClient) Subscribe(subj string, handler Handler) {
 	_, err := n.conn.Subscribe(subj, func(m *nats.Msg) {
 		defer func() {
 			re := recover()
+
 			MessageHandleCounter.Recover(re, false)
 
 			if re != nil {
+				sentry.CaptureException(re.(error))
 				loggger.Wrapf(re.(error), "[nats.%s] panic error received", subj)
 				if m.Reply == "" {
 					_ = m.Respond(nil)

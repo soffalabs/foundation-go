@@ -61,6 +61,18 @@ func Any(err error, message string) error {
 	return e.New(message)
 }
 
+func RaiseFunctional(msg string) {
+	Raise(NewFunctionalError0(msg))
+}
+
+func RaiseErrNotFound(msg string) {
+	Raise(NewFunctionalError(ErrNotFoundCode, msg))
+}
+
+func RaiseValidationError(msg string) {
+	Raise(NewFunctionalError("FVAL", msg))
+}
+
 func Raise(err ...error) {
 	if err != nil {
 		for _, r := range err {
@@ -114,9 +126,11 @@ func NewTechnicalError0(message string) error {
 	return e.WithMessage(ErrTechnical{Code: "TERR"}, message)
 }
 
-func AnyError(err1 error, err2 error) error {
-	if err1 == nil {
-		return err2
+func AnyError(errors ...error) error {
+	for _, err := range errors {
+		if err != nil {
+			return err
+		}
 	}
-	return err2
+	return nil
 }

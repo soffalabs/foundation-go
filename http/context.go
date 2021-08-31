@@ -7,6 +7,7 @@ import (
 	"github.com/soffa-io/soffa-core-go/errors"
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
+	"github.com/soffa-io/soffa-core-go/sentry"
 	"net/http"
 	"regexp"
 )
@@ -76,7 +77,6 @@ func (c *Context) Header(name string) string {
 
 func (c *Context) BindJson(dest interface{}) bool {
 	if err := c.gin.ShouldBind(dest); err != nil {
-		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), err)
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -195,14 +195,17 @@ func (c *Context) SendError(orig error) {
 	if orig == nil {
 		return
 	}
+
 	err := errors.Unwrap(orig)
 
 	switch err.(type) {
 	default:
+		sentry.CaptureException(orig)
 		c.gin.JSON(http.StatusInternalServerError, gin.H{
 			"message": orig.Error(),
 		})
 	case errors.ErrTechnical:
+		sentry.CaptureException(orig)
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":    (err.(errors.ErrTechnical)).Code,
 			"message": orig.Error(),

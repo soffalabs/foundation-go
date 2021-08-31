@@ -2,9 +2,8 @@ package db
 
 import (
 	"github.com/soffa-io/soffa-core-go/errors"
+	"github.com/soffa-io/soffa-core-go/h"
 )
-
-
 
 type TenantsLoader = func() []string
 
@@ -30,7 +29,7 @@ type BaseLink interface {
 }
 
 type Link struct {
-	ds *DS
+	ds   *DS
 	base BaseLink
 }
 
@@ -85,6 +84,10 @@ func (l *Link) First(dest interface{}, query *Query) bool {
 	return !res.Empty
 }
 
+func (l *Link) FindById(dest interface{}, id string) bool {
+	return l.First(dest, Q().W(h.Map{"id": id}))
+}
+
 func (l *Link) Truncate(model interface{}) {
 	errors.Raise(l.base.Truncate(model))
 }
@@ -120,5 +123,5 @@ func (l *Link) Transactional(callback func(link *Link)) {
 }
 
 func (l *Link) Tenant(tenant string) *Link {
-	return &Link{ds:l.ds, base: l.base.WithTenant(tenant)}
+	return &Link{ds: l.ds, base: l.base.WithTenant(tenant)}
 }

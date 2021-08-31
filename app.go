@@ -3,6 +3,7 @@ package soffa
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/soffa-io/soffa-core-go/sentry"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -223,6 +224,7 @@ func (s *Scheduler) Every(interval string, task func()) {
 	_, err := s.s.Every(interval).Do(func() {
 		defer func() {
 			if r := recover(); r != nil {
+				sentry.CaptureException(r.(error))
 				log.Default.Error("critital error from task execution -- %v", r)
 			}
 		}()

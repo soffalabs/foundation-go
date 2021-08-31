@@ -5,6 +5,7 @@ go 1.16
 require (
 	emperror.dev/errors v0.8.0
 	github.com/gavv/httpexpect/v2 v2.3.1
+	github.com/getsentry/sentry-go v0.11.0
 	github.com/gin-gonic/gin v1.7.3
 	github.com/go-co-op/gocron v1.7.1
 	github.com/go-gormigrate/gormigrate/v2 v2.0.0
@@ -17,7 +18,7 @@ require (
 	github.com/nats-io/nats.go v1.12.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/xid v1.3.0
-	github.com/spf13/cobra v0.0.3
+	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
 	github.com/swaggo/gin-swagger v1.3.1
@@ -29,5 +30,4 @@ require (
 	gorm.io/driver/postgres v1.1.0
 	gorm.io/driver/sqlite v1.1.4
 	gorm.io/gorm v1.21.13
-	gorm.io/plugin/prometheus v0.0.0-20210820101226-2a49866f83ee
 )

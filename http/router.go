@@ -128,6 +128,7 @@ func (r *Router) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOp
 	routes = append(routes, r.POST(base, handler.Create))
 	routes = append(routes, r.DELETE(base, handler.Delete))
 	routes = append(routes, r.PATCH(fmt.Sprintf("%s/:id", base), handler.Update))
+	routes = append(routes, r.POST(fmt.Sprintf("%s/:id", base), handler.Update))
 	if opts != nil {
 		for _, r := range routes {
 			r.jwtAuthRequired = opts.JwtAuth
