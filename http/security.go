@@ -16,6 +16,7 @@ type Authentication struct {
 	Username  string
 	Guest     bool
 	Principal interface{}
+	Claims    map[string]interface{}
 }
 
 type Filter interface {
@@ -53,7 +54,8 @@ func (f JwtBearerFilter) Handle(c *Context) {
 
 	c.gin.Set(AuthenticationKey, Authentication{
 		Username:  decoded.Subject,
-		Principal: decoded.Ext,
+		Principal: decoded,
+		Claims:    decoded.Ext,
 	})
 
 	c.gin.Next()

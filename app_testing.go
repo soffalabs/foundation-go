@@ -116,10 +116,14 @@ func (t TestRequest) Expect() TestResponse {
 	}
 }
 
-func (t TestRequest) WithNewBearer(subject string, audience string) TestRequest {
+func (t TestRequest) WithJwtBearer(subject string, audience string) TestRequest {
+	return t.WithJwtBearerClaims(subject, audience, h.Map{})
+}
+
+func (t TestRequest) WithJwtBearerClaims(subject string, audience string, claims h.Map) TestRequest {
 	secret := os.Getenv("JWT_SECRET")
 	h.AssertNotEmpty(secret, "JWT_SECRET is missing")
-	token, err := h.CreateJwt(secret, "app", subject, audience, h.Map{})
+	token, err := h.CreateJwt(secret, "app", subject, audience, claims)
 	assert.Nil(t.test, err)
 	return t.Bearer(token)
 }
