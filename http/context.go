@@ -217,11 +217,16 @@ func (c *Context) SendError(orig error) {
 			"message": orig.Error(),
 		})
 	case errors.ErrFunctional:
+		code := (err.(errors.ErrFunctional)).Code
+		status := http.StatusBadRequest
+		if code == errors.ErrNotFoundCode {
+			status = http.StatusNotFound
+		}
 		msg := h.Map {
-			"code":    (err.(errors.ErrFunctional)).Code,
+			"code":    code,
 			"message": orig.Error(),
 		}
-		c.gin.JSON(http.StatusBadRequest, msg)
+		c.gin.JSON(status, msg)
 	}
 
 }
