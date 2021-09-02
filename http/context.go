@@ -167,19 +167,21 @@ func (c *Context) OK(body interface{}) {
 }
 
 func (c *Context) Created(body interface{}) {
-	c.gin.JSON(http.StatusCreated, body)
+	c.JSON(http.StatusCreated, body)
 }
 
 func (c *Context) JSON(status int, body interface{}) {
-	c.gin.JSON(status, body)
+	if !c.IsAborted() {
+		c.gin.JSON(status, body)
+	}
 }
 
 func (c *Context) NotFound(message string) {
-	c.gin.JSON(404, h.Map{"message": message})
+	c.JSON(404, h.Map{"message": message})
 }
 
 func (c *Context) BadRequest(body interface{}) {
-	c.gin.JSON(http.StatusBadRequest, body)
+	c.JSON(http.StatusBadRequest, body)
 }
 
 func (c *Context) Forbidden(message string) {

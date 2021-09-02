@@ -45,7 +45,8 @@ func (link *GormLink) Create(model interface{}) error {
 
 func (link *GormLink) Save(model interface{}) error {
 	return link.withConn(func(conn *gorm.DB) error {
-		return conn.Save(model).Error
+		res := conn.Save(model)
+		return res.Error
 	})
 }
 

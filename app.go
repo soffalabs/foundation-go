@@ -72,7 +72,7 @@ func (a *App) Configure(cb func(router *http.Router, scheduler *Scheduler)) *App
 			Method:  "GET",
 			Paths:   []string{"/status", "/healthz"},
 			Handler: a.handleHealthCheck,
-			Open:    true,
+			//Open:    true,
 		})
 
 	}

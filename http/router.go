@@ -8,6 +8,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	swagger "github.com/swaggo/gin-swagger"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -40,8 +41,7 @@ type Route struct {
 	Paths             []string
 	Handler           HandlerFunc
 	basicAuthRequired bool
-	jwtAuthRequired   bool
-	Open              bool
+	jwtAuthRequired bool
 }
 
 func NewRouter() *Router {
@@ -124,6 +124,9 @@ type RouteOpts struct {
 
 func (r *Router) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOpts) {
 	var routes []*Route
+
+	base = "/" + strings.TrimSuffix(strings.TrimPrefix(base, "/"), "/")
+
 	routes = append(routes, r.GET(base, handler.List))
 	routes = append(routes, r.POST(base, handler.Create))
 	routes = append(routes, r.DELETE(base, handler.Delete))

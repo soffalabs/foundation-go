@@ -4,6 +4,7 @@ import (
 	"github.com/soffa-io/soffa-core-go/h"
 	"github.com/soffa-io/soffa-core-go/log"
 	"net/http"
+	"regexp"
 	"strings"
 )
 
@@ -24,11 +25,33 @@ type Filter interface {
 }
 
 type JwtBearerFilter struct {
-	Secret   string
-	Audience string
+	Secret    string
+	Audience  string
+	Exclusion []string
 }
 
-func (f JwtBearerFilter) Handle(c *Context) {
+func (f *JwtBearerFilter) Exclude(exclusions ...string) *JwtBearerFilter {
+	f.Exclusion = exclusions
+	return f
+}
+
+func (f *JwtBearerFilter) Handle(c *Context) {
+
+	if len(f.Exclusion)>0 {
+		for _, e := range f.Exclusion {
+			uri := strings.TrimSuffix(c.Request().RequestURI, "/")
+			if uri == e {
+				c.gin.Next()
+				return
+			}
+			re := regexp.MustCompile(e)
+			if re.MatchString(uri) {
+				c.gin.Next()
+				return
+			}
+		}
+	}
+
 	auth := c.Header("Authorization")
 	if auth == "" {
 		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, h.Map{"message": "AUTH_REQUIRED required"})
@@ -60,45 +83,3 @@ func (f JwtBearerFilter) Handle(c *Context) {
 
 	c.gin.Next()
 }
-
-/*
-
-func (r *Router) checkSecurityConstraints(route *Route, gc *gin.Context) {
-	if route.Open {
-		return
-	}
-	if route.basicAuthRequired {
-		user, password, hasAuth := c.gin.Request.BasicAuth()
-		if !hasAuth {
-			c.gin.AbortWithStatusJSON(http.StatusUnauthorized, h.Map{"message": "AUTH_REQUIRED required"})
-			return
-		}
-		principal, err := r.authenticate(user, password)
-		if err != nil || principal == nil {
-			c.gin.AbortWithStatusJSON(http.StatusForbidden, h.Map{"message": "INVALID_CREDENTIALS"})
-			if err != nil {
-				log.Default.Error(err)
-			}
-			return
-		}
-		c.gin.Set(AuthenticationKey, Authentication{
-			Username:  user,
-			Guest:     false,
-			Principal: principal,
-		})
-		return
-	}
-
-	if route.jwtAuthRequired || r.jwtAuthRequired {
-
-		if h.IsStrEmpty(r.jwtSecret) {
-			c.gin.AbortWithStatusJSON(http.StatusInternalServerError, h.Map{"message": "MISSING_JWT_SECRET"})
-			return
-		}
-
-
-
-	}
-}
-
-*/

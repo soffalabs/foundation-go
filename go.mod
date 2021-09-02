@@ -16,6 +16,7 @@ require (
 	github.com/joho/godotenv v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect
 	github.com/nats-io/nats.go v1.12.0
+	github.com/osamingo/indigo v1.1.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/rs/xid v1.3.0
 	github.com/spf13/cobra v0.0.5
