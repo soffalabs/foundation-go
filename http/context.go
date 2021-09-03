@@ -179,6 +179,11 @@ func (c *Context) JSON(status int, body interface{}) {
 		c.gin.JSON(status, body)
 	}
 }
+func (c *Context) String(status int, format string, args... interface{}) {
+	if !c.IsAborted() {
+		c.gin.String(status, format, args)
+	}
+}
 
 func (c *Context) NotFound(message string) {
 	c.JSON(404, h.Map{"message": message})
