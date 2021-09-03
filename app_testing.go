@@ -90,6 +90,12 @@ func (t *Tester) POST(path string, data interface{}) TestRequest {
 	}
 }
 
+func (t *Tester) POSTForm(path string, data interface{}) TestRequest {
+	return TestRequest{
+		request: t.expect.POST(path).WithForm(data),
+	}
+}
+
 func (t *Tester) PUT(path string, data interface{}) TestRequest {
 	return TestRequest{
 		request: t.expect.PUT(path).WithJSON(data),

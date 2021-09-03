@@ -135,6 +135,10 @@ func (c *Context) Param(name string) string {
 	return c.gin.Param(name)
 }
 
+func (c *Context) PostForm(name string) string {
+	return c.gin.PostForm(name)
+}
+
 func (c *Context) RequireParam(name string) string {
 	value := c.gin.Param(name)
 	if h.IsStrEmpty(value) {
