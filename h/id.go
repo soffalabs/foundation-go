@@ -5,8 +5,21 @@ import (
 	"github.com/osamingo/indigo"
 	"github.com/rs/xid"
 	"github.com/soffa-io/soffa-core-go/errors"
+	"log"
 	"time"
 )
+
+
+var g *indigo.Generator
+
+func init() {
+	t := time.Unix(1630698318, 0) // 2021-09-03 20:45:00 UTC
+	g = indigo.New(nil, indigo.StartTime(t))
+	_, err := g.NextID()
+	if err != nil {
+		log.Fatalln(err)
+	}
+}
 
 // NewUniqueIdP Create a new UniqueId with a prefix
 func NewUniqueIdP(prefix string) string {
@@ -19,8 +32,6 @@ func NewUniqueId() string {
 
 // NewShortId Create a new UniqueId
 func NewShortId() string {
-	t := time.Unix(1257894000, 0) // 2009-11-10 23:00:00 UTC
-	g := indigo.New(nil, indigo.StartTime(t))
 	value, err := g.NextID()
 	errors.Raise(err)
 	return value
