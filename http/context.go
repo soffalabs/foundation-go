@@ -131,6 +131,14 @@ func (c *Context) RequireBasicAuth() *Credentials {
 	return &Credentials{Username: user, Password: password}
 }
 
+func (c *Context) GetBasicAuth() *Credentials {
+	user, password, hasAuth := c.gin.Request.BasicAuth()
+	if !hasAuth || h.IsStrEmpty(user) {
+		return nil
+	}
+	return &Credentials{Username: user, Password: password}
+}
+
 func (c *Context) Param(name string) string {
 	return c.gin.Param(name)
 }
