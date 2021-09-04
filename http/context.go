@@ -77,6 +77,7 @@ func (c *Context) Header(name string) string {
 
 func (c *Context) BindJson(dest interface{}) bool {
 	if err := c.gin.ShouldBind(dest); err != nil {
+		log.Default.Debugf("Validation errors: %s", err.Error())
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":  "validation.error",
 			"error": err.Error(),
@@ -141,6 +142,22 @@ func (c *Context) GetBasicAuth() *Credentials {
 
 func (c *Context) Param(name string) string {
 	return c.gin.Param(name)
+}
+
+func (c *Context) Query(name string) string {
+	return c.gin.Query(name)
+}
+
+func (c *Context) RequeryQuery(name string) string {
+	value := c.gin.Query(name)
+	if h.IsStrEmpty(value) {
+		message := fmt.Sprintf("Query param '%s' is missing", name)
+		_ = log.Default.Capture(fmt.Sprintf("http.request.check:%s", c.gin.Request.RequestURI), errors.Errorf(message))
+		c.gin.AbortWithStatusJSON(http.StatusBadRequest, h.Map{
+			"message": message,
+		})
+	}
+	return value
 }
 
 func (c *Context) PostForm(name string) string {
@@ -238,6 +255,9 @@ func (c *Context) SendError(orig error) {
 		status := http.StatusBadRequest
 		if code == errors.ErrNotFoundCode {
 			status = http.StatusNotFound
+		}
+		if code == errors.ErrForbiddenCode {
+			status = http.StatusForbidden
 		}
 		msg := h.Map {
 			"code":    code,

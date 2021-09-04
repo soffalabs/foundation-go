@@ -69,6 +69,10 @@ func RaiseErrNotFound(msg string) {
 	Raise(NewFunctionalError(ErrNotFoundCode, msg))
 }
 
+func RaiseErrForbidden(msg string) {
+	Raise(NewFunctionalError(ErrForbiddenCode, msg))
+}
+
 func RaiseValidationError(msg string) {
 	Raise(NewFunctionalError("FVAL", msg))
 }

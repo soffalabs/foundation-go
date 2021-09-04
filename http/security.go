@@ -38,8 +38,8 @@ func (f *JwtBearerFilter) Exclude(exclusions ...string) *JwtBearerFilter {
 func (f *JwtBearerFilter) Handle(c *Context) {
 
 	if len(f.Exclusion)>0 {
+		uri := strings.Split(strings.TrimSuffix(c.Request().URL.Path, "/"), "?")[0]
 		for _, e := range f.Exclusion {
-			uri := strings.TrimSuffix(c.Request().RequestURI, "/")
 			if uri == e {
 				c.gin.Next()
 				return

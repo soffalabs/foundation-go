@@ -78,55 +78,59 @@ func (t *Tester) Truncate(dsName string, names []string) {
 	}
 }*/
 
-func (t *Tester) GET(path string) TestRequest {
-	return TestRequest{
+func (t *Tester) GET(path string) *TestRequest {
+	return &TestRequest{
 		request: t.expect.GET(path),
 	}
 }
 
-func (t *Tester) POST(path string, data interface{}) TestRequest {
-	return TestRequest{
+func (t *Tester) POST(path string, data interface{}) *TestRequest {
+	return &TestRequest{
 		request: t.expect.POST(path).WithJSON(data),
 	}
 }
 
-func (t *Tester) POSTForm(path string, data interface{}) TestRequest {
-	return TestRequest{
+func (t *Tester) POSTForm(path string, data interface{}) *TestRequest {
+	return &TestRequest{
 		request: t.expect.POST(path).WithForm(data),
 	}
 }
 
-func (t *Tester) PUT(path string, data interface{}) TestRequest {
-	return TestRequest{
+func (t *Tester) PUT(path string, data interface{}) *TestRequest {
+	return &TestRequest{
 		request: t.expect.PUT(path).WithJSON(data),
 	}
 }
 
-func (t *Tester) DELETE(path string, data interface{}) TestRequest {
-	return TestRequest{
+func (t *Tester) DELETE(path string, data interface{}) *TestRequest {
+	return &TestRequest{
 		request: t.expect.DELETE(path).WithJSON(data),
 	}
 }
 
-func (t *Tester) PATCH(path string, data interface{}) TestRequest {
-	return TestRequest{
+func (t *Tester) PATCH(path string, data interface{}) *TestRequest {
+	return &TestRequest{
 		request: t.expect.PATCH(path).WithJSON(data),
 	}
 }
 
 
-func (t TestRequest) Expect() TestResponse {
+func (t *TestRequest) P(key string, value interface{}) *TestRequest {
+	t.request.WithQuery(key, value)
+	return t
+}
+func (t *TestRequest) Expect() TestResponse {
 	return TestResponse{
 		response: t.request.Expect(),
 		test:     t.test,
 	}
 }
 
-func (t TestRequest) WithJwtBearer(subject string, audience string) TestRequest {
+func (t *TestRequest) WithJwtBearer(subject string, audience string) *TestRequest {
 	return t.WithJwtBearerClaims(subject, audience, h.Map{})
 }
 
-func (t TestRequest) WithJwtBearerClaims(subject string, audience string, claims h.Map) TestRequest {
+func (t *TestRequest) WithJwtBearerClaims(subject string, audience string, claims h.Map) *TestRequest {
 	secret := os.Getenv("JWT_SECRET")
 	h.AssertNotEmpty(secret, "JWT_SECRET is missing")
 	token, err := h.CreateJwt(secret, "app", subject, audience, claims)
@@ -134,12 +138,12 @@ func (t TestRequest) WithJwtBearerClaims(subject string, audience string, claims
 	return t.Bearer(token)
 }
 
-func (t TestRequest) Bearer(token string) TestRequest {
+func (t *TestRequest) Bearer(token string) *TestRequest {
 	t.request.WithHeader("Authorization", fmt.Sprintf("Bearer %s", token))
 	return t
 }
 
-func (t TestRequest) BasicAuth(user string, password string) TestRequest {
+func (t *TestRequest) BasicAuth(user string, password string) *TestRequest {
 	t.request.WithBasicAuth(user, password)
 	return t
 }

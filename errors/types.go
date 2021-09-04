@@ -2,6 +2,7 @@ package errors
 
 const (
 	ErrNotFoundCode = "F404"
+	ErrForbiddenCode = "F403"
 )
 
 type ErrFunctional struct {
