@@ -148,7 +148,7 @@ func (c *Context) Query(name string) string {
 	return c.gin.Query(name)
 }
 
-func (c *Context) RequeryQuery(name string) string {
+func (c *Context) RequireQuery(name string) string {
 	value := c.gin.Query(name)
 	if h.IsStrEmpty(value) {
 		message := fmt.Sprintf("Query param '%s' is missing", name)
@@ -236,12 +236,12 @@ func (c *Context) SendError(orig error) {
 
 	switch err.(type) {
 	default:
-		sentry.CaptureException(orig)
+		sentry.CaptureException(err)
 		c.gin.JSON(http.StatusInternalServerError, gin.H{
 			"message": orig.Error(),
 		})
 	case errors.ErrTechnical:
-		sentry.CaptureException(orig)
+		sentry.CaptureException(err)
 		c.gin.JSON(http.StatusBadRequest, gin.H{
 			"code":    (err.(errors.ErrTechnical)).Code,
 			"message": orig.Error(),
