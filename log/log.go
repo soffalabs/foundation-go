@@ -83,7 +83,7 @@ func (l *Logger) With(fields ...interface{}) *Logger {
 func (l *Logger) Infof(format string, args ...interface{}) {
 	if args == nil || len(args) == 0 {
 		l.log.Info(format)
-	}else {
+	} else {
 		l.log.Infof(format, args...)
 	}
 }

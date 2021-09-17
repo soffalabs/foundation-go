@@ -8,8 +8,8 @@ import (
 )
 
 type Manager struct {
-	ds map[string]*DS
-	migrated bool
+	ds          map[string]*DS
+	migrated    bool
 	serviceName string
 }
 
@@ -17,17 +17,17 @@ func NewManager(serviceName string) *Manager {
 	re := regexp.MustCompile("[^a-zA-Z0-9_]")
 	serviceName = re.ReplaceAllString(serviceName, "_")
 	return &Manager{
-		ds: map[string]*DS{},
-		migrated: false,
+		ds:          map[string]*DS{},
+		migrated:    false,
 		serviceName: serviceName,
 	}
 }
 
-func (m *Manager) Add(ds DS) *Link  {
+func (m *Manager) Add(ds DS) *Link {
 	if h.IsStrEmpty(ds.Id) {
 		if !m.IsEmpty() {
 			log.Default.Fatal("When adding multiple ds, an explicit Id is required")
-		}else {
+		} else {
 			ds.Id = "primary"
 		}
 	}
@@ -41,7 +41,7 @@ func (m *Manager) Add(ds DS) *Link  {
 }
 
 func (m *Manager) Migrate() {
-	if m.IsEmpty()  || m.migrated {
+	if m.IsEmpty() || m.migrated {
 		return
 	}
 

@@ -29,7 +29,7 @@ func (n *NatsMessageClient) Publish(subj string, data interface{}) error {
 	err := SendMessageCounter.Watch(func() error {
 		if bytes, err := h.GetBytes(data); err != nil {
 			return err
-		}else {
+		} else {
 			return n.conn.Publish(subj, bytes)
 		}
 	})

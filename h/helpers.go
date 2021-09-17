@@ -18,7 +18,7 @@ func AnyStr(candidates ...string) string {
 }
 
 func Nil(data interface{}) interface{} {
-	if IsNil(data){
+	if IsNil(data) {
 		return nil
 	}
 	return data

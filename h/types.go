@@ -2,7 +2,6 @@ package h
 
 type Map = map[string]interface{}
 
-
 func UnwrapMap(value Map) map[string]interface{} {
 	if IsNil(value) {
 		return nil

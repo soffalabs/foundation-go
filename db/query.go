@@ -12,7 +12,6 @@ type Query struct {
 	whereMap *h.Map
 }
 
-
 type Result struct {
 	Error        error
 	Empty        bool
@@ -43,4 +42,3 @@ func (q *Query) Sort(field string) *Query {
 	q.sort = field
 	return q
 }
-

@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	 regexCleanPathInt = regexp.MustCompile(`/+`)
-	 regexCleanPath = regexp.MustCompile(`^/+|/+$`)
+	regexCleanPathInt = regexp.MustCompile(`/+`)
+	regexCleanPath    = regexp.MustCompile(`^/+|/+$`)
 )
 
 func IsStrEmpty(value string) bool {

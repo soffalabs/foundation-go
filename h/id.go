@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-
 var g *indigo.Generator
 
 func init() {
@@ -25,6 +24,7 @@ func init() {
 func NewUniqueIdP(prefix string) string {
 	return fmt.Sprintf("%s%s", prefix, xid.New().String())
 }
+
 // NewUniqueId Create a new UniqueId
 func NewUniqueId() string {
 	return NewUniqueIdP("")
@@ -36,4 +36,3 @@ func NewShortId() string {
 	errors.Raise(err)
 	return value
 }
-

@@ -17,7 +17,7 @@ type Context struct {
 	Context *context.Ctx
 }
 
-func newContext( gin *gin.Context) *Context {
+func newContext(gin *gin.Context) *Context {
 	return &Context{gin: gin, Context: context.New()}
 }
 
@@ -53,6 +53,18 @@ func (c *Context) Auth() Authentication {
 			Username:  "guest",
 		}
 	}
+}
+
+func (c *Context) RequireAuth() *Authentication {
+	value, exists := c.gin.Get(AuthenticationKey)
+	if !exists {
+		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+			"message": "Authentication requuired",
+		})
+		return nil
+	}
+	auth := value.(Authentication)
+	return &auth
 }
 
 func (c *Context) SetHeaders(headers map[string]string) {
@@ -124,10 +136,10 @@ func (c *Context) RequireBasicAuth() *Credentials {
 	user, password, hasAuth := c.gin.Request.BasicAuth()
 	if !hasAuth || h.IsStrEmpty(user) {
 		_ = log.Default.Capture("http.request.unauthorized", errors.Errorf(c.gin.Request.RequestURI))
-		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+		/*c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 			"message": "Missing credentials",
-		})
-		return nil
+		})*/
+		errors.RaiseUnauthorized("Missing credentials")
 	}
 	return &Credentials{Username: user, Password: password}
 }
@@ -204,7 +216,7 @@ func (c *Context) JSON(status int, body interface{}) {
 		c.gin.JSON(status, body)
 	}
 }
-func (c *Context) String(status int, format string, args... interface{}) {
+func (c *Context) String(status int, format string, args ...interface{}) {
 	if !c.IsAborted() {
 		c.gin.String(status, format, args)
 	}
@@ -259,7 +271,10 @@ func (c *Context) SendError(orig error) {
 		if code == errors.ErrForbiddenCode {
 			status = http.StatusForbidden
 		}
-		msg := h.Map {
+		if code == errors.ErrUnauthorizedCode {
+			status = http.StatusUnauthorized
+		}
+		msg := h.Map{
 			"code":    code,
 			"message": orig.Error(),
 		}

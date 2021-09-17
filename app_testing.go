@@ -66,10 +66,10 @@ func (t *Tester) Close() {
 	t.server.Close()
 }
 
-
 func (t *Tester) Arg(key string) interface{} {
 	return t.app.args[key]
 }
+
 /*
 func (t *Tester) Truncate(dsName string, names []string) {
 	ds := t.App.GetDbLink(dsName)
@@ -113,7 +113,6 @@ func (t *Tester) PATCH(path string, data interface{}) *TestRequest {
 		request: t.expect.PATCH(path).WithJSON(data),
 	}
 }
-
 
 func (t *TestRequest) P(key string, value interface{}) *TestRequest {
 	t.request.WithQuery(key, value)

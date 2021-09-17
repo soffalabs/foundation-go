@@ -73,6 +73,10 @@ func RaiseErrForbidden(msg string) {
 	Raise(NewFunctionalError(ErrForbiddenCode, msg))
 }
 
+func RaiseUnauthorized(msg string) {
+	Raise(NewFunctionalError(ErrUnauthorizedCode, msg))
+}
+
 func RaiseValidationError(msg string) {
 	Raise(NewFunctionalError("FVAL", msg))
 }

@@ -41,7 +41,7 @@ func ReadVaultSecret(uri string, token string) (map[string]interface{}, error) {
 		}
 		if IsEmpty(token) {
 			client.SetToken(u.User.Username())
-		}else {
+		} else {
 			client.SetToken(token)
 		}
 		secret, err = client.Logical().Read(fmt.Sprintf("secret/data/%s", u.Path))

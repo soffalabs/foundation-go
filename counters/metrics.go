@@ -12,9 +12,9 @@ type Counter struct {
 	err     int32
 	code    string
 	desc    string
-	pmTotal  prometheus.Counter
-	pmErr prometheus.Counter
-	export bool
+	pmTotal prometheus.Counter
+	pmErr   prometheus.Counter
+	export  bool
 }
 
 var (
@@ -26,8 +26,8 @@ func NewCounter(code string, desc string, export bool) *Counter {
 		return counter
 	}
 	counter := &Counter{
-		code: code,
-		desc: desc,
+		code:   code,
+		desc:   desc,
 		export: export,
 	}
 	__registry[code] = counter
@@ -98,7 +98,7 @@ func (a *Counter) Total() int32 {
 func (a *Counter) Recover(rec interface{}, rethrow bool) {
 	if rec == nil {
 		a.Inc()
-	}else {
+	} else {
 		a.Err()
 		if rethrow {
 			panic(rec)

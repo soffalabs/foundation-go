@@ -1,6 +1,5 @@
 package broker
 
-
 import (
 	"github.com/nats-io/nats.go"
 	"github.com/soffa-io/soffa-core-go/errors"
@@ -8,15 +7,14 @@ import (
 	"github.com/soffa-io/soffa-core-go/log"
 )
 
-
 type FakeRpcClient struct {
 	Client
-	id   string
-	conn *nats.Conn
+	id       string
+	conn     *nats.Conn
 	subjects map[string]func(interface{}) (interface{}, error)
 }
 
-func (n *FakeRpcClient) Start()  {
+func (n *FakeRpcClient) Start() {
 }
 
 func (n *FakeRpcClient) Ping() error {
@@ -79,7 +77,7 @@ func (n *FakeRpcClient) Subscribe(subj string, handler Handler) {
 			re := recover()
 			MessageHandleCounter.Recover(re, false)
 			if re != nil {
-				log.Default.Errorf( "message handling failed [%s] -- %s", subj, re.(error).Error())
+				log.Default.Errorf("message handling failed [%s] -- %s", subj, re.(error).Error())
 			}
 		}()
 		bytes, err := h.GetBytes(data)

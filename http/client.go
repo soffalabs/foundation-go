@@ -35,7 +35,6 @@ var (
 	httpInterceptor Interceptor
 )
 
-
 func Intercept(interceptor Interceptor) {
 	httpInterceptor = interceptor
 }
@@ -145,6 +144,6 @@ func parseResponse(resp *resty.Response, err error) (Response, error) {
 		Status:  resp.StatusCode(),
 		Body:    resp.Body(),
 		IsError: resp.IsError(),
-		Err: err,
+		Err:     err,
 	}, nil
 }

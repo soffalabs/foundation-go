@@ -36,12 +36,13 @@ type CrudHandler interface {
 }
 
 type Route struct {
-	Method            string
-	Path              string
-	Paths             []string
-	Handler           HandlerFunc
-	basicAuthRequired bool
-	jwtAuthRequired bool
+	Method  string
+	Path    string
+	Paths   []string
+	Handler HandlerFunc
+	//basicAuthRequired bool
+	//jwtAuthRequired   bool
+	anonymous bool
 }
 
 func NewRouter() *Router {
@@ -132,12 +133,11 @@ func (r *Router) CRUDWithOptions(base string, handler CrudHandler, opts *RouteOp
 	routes = append(routes, r.DELETE(base, handler.Delete))
 	routes = append(routes, r.PATCH(fmt.Sprintf("%s/:id", base), handler.Update))
 	routes = append(routes, r.POST(fmt.Sprintf("%s/:id", base), handler.Update))
-	if opts != nil {
+	/*if opts != nil {
 		for _, r := range routes {
-			r.jwtAuthRequired = opts.JwtAuth
-			r.basicAuthRequired = opts.BasicAuth
+			r.authRequired = opts.JwtAuth || opts.BasicAuth
 		}
-	}
+	}*/
 }
 
 func (r *Router) Use(handlers ...Filter) *Router {
@@ -187,3 +187,4 @@ func (r *Router) Add(route *Route) *Router {
 func (r *Router) Start(port int) {
 	_ = r.engine.Run(fmt.Sprintf(":%d", port))
 }
+
