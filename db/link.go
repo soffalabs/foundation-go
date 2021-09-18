@@ -17,7 +17,7 @@ type BaseLink interface {
 	Exec(command string) error
 	Raw(result interface{}, query string, values ...interface{}) error
 	Pluck(table interface{}, column string, dest interface{}) error
-	Count(model interface{}) (int64, error)
+	Count(model interface{}, query *Query) (int64, error)
 	CreateSchema(name string) error
 	Find(dest interface{}, query Query) Result
 	Transactional(callback func(link BaseLink) error) error
@@ -62,8 +62,8 @@ func (l *Link) Pluck(table interface{}, column string, dest interface{}) {
 	errors.Raise(l.base.Pluck(table, column, dest))
 }
 
-func (l *Link) Count(model interface{}) int64 {
-	res, err := l.base.Count(model)
+func (l *Link) Count(model interface{}, query *Query) int64 {
+	res, err := l.base.Count(model, query)
 	errors.Raise(err)
 	return res
 }

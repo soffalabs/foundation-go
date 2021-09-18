@@ -56,7 +56,7 @@ func (link *GormLink) Exec(command string) error {
 	})
 }
 
-func (link *GormLink) Raw(result interface{}, sql string, values... interface{}) error {
+func (link *GormLink) Raw(result interface{}, sql string, values ...interface{}) error {
 	return link.withConn(func(conn *gorm.DB) error {
 		return conn.Raw(sql, values...).Scan(result).Error
 	})
@@ -74,9 +74,16 @@ func (link *GormLink) Pluck(table interface{}, column string, dest interface{}) 
 	})
 }
 
-func (link *GormLink) Count(model interface{}) (int64, error) {
+func (link *GormLink) Count(model interface{}, query *Query) (int64, error) {
 	var count int64 = 0
 	err := link.withConn(func(conn *gorm.DB) error {
+		if query != nil {
+			if query.whereMap != nil {
+				return conn.Model(model).Where(h.UnwrapMap(*query.whereMap)).Count(&count).Error
+			} else if !h.IsEmpty(query.where) {
+				return conn.Model(model).Where(query.where, query.args...).Count(&count).Error
+			}
+		}
 		return conn.Model(model).Count(&count).Error
 	})
 	return count, err
