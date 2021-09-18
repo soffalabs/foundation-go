@@ -12,6 +12,7 @@ require (
 	github.com/go-resty/resty/v2 v2.6.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/hashicorp/vault/api v1.1.1
+	github.com/influxdata/influxdb-client-go/v2 v2.5.1
 	github.com/jeremywohl/flatten v1.0.1
 	github.com/joho/godotenv v1.3.0
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect

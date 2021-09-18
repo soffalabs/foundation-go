@@ -59,7 +59,7 @@ func (c *Context) RequireAuth() *Authentication {
 	value, exists := c.gin.Get(AuthenticationKey)
 	if !exists {
 		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"message": "Authentication requuired",
+			"message": "Authentication required",
 		})
 		return nil
 	}
