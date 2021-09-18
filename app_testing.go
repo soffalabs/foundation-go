@@ -118,6 +118,12 @@ func (t *TestRequest) P(key string, value interface{}) *TestRequest {
 	t.request.WithQuery(key, value)
 	return t
 }
+
+func (t *TestRequest) Query(key string, value interface{}) *TestRequest {
+	t.request.WithQuery(key, value)
+	return t
+}
+
 func (t *TestRequest) Expect() TestResponse {
 	return TestResponse{
 		response: t.request.Expect(),
@@ -214,6 +220,11 @@ func (t TestResult) NotContains(value string) TestResult {
 
 func (t TestResult) IsArray() TestResult {
 	t.value.Array()
+	return t
+}
+
+func (t TestResult) IsArrayWithLength(size int) TestResult {
+	t.value.Array().Length().Equal(size)
 	return t
 }
 

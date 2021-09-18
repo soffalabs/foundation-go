@@ -56,6 +56,12 @@ func (link *GormLink) Exec(command string) error {
 	})
 }
 
+func (link *GormLink) Raw(result interface{}, sql string, values... interface{}) error {
+	return link.withConn(func(conn *gorm.DB) error {
+		return conn.Raw(sql, values...).Scan(result).Error
+	})
+}
+
 func (link *GormLink) First(model interface{}) error {
 	return link.withConn(func(conn *gorm.DB) error {
 		return conn.First(model).Error

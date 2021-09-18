@@ -15,6 +15,7 @@ type BaseLink interface {
 	Create(model interface{}) error
 	Save(model interface{}) error
 	Exec(command string) error
+	Raw(result interface{}, query string, values ...interface{}) error
 	Pluck(table interface{}, column string, dest interface{}) error
 	Count(model interface{}) (int64, error)
 	CreateSchema(name string) error
@@ -76,6 +77,13 @@ func (l *Link) Find(dest interface{}, query *Query) Result {
 	errors.Raise(res.Error)
 	return res
 }
+
+
+func (l *Link) Raw(result interface{}, query string, values ...interface{})  {
+	err := l.base.Raw(result, query, values...)
+	errors.Raise(err)
+}
+
 
 func (l *Link) First(dest interface{}, query *Query) bool {
 	query.Limit(1)
