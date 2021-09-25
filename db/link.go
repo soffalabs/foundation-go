@@ -72,10 +72,9 @@ func (l *Link) CreateSchema(name string) {
 	errors.Raise(l.base.CreateSchema(name))
 }
 
-func (l *Link) Find(dest interface{}, query *Query) Result {
+func (l *Link) Find(dest interface{}, query *Query)  {
 	res := l.base.Find(dest, *query)
 	errors.Raise(res.Error)
-	return res
 }
 
 

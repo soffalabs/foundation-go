@@ -124,3 +124,9 @@ func (ds *DS) bootstrap() {
 	ds.counterOperations = counters.NewCounter(fmt.Sprintf("x_app_%s_db_operations", ds.serviceName), "Database operations", true)
 	ds.link = &Link{ds: ds, base: &GormLink{conn: link, ds: ds}}
 }
+
+
+func (ds *DS) Bootstrap() *Link {
+	ds.bootstrap()
+	return ds.link
+}

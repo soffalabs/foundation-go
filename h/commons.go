@@ -8,6 +8,9 @@ var (
 	nilInteface interface{}
 )
 
+func IsNotEmpty(value interface{}) bool {
+	return !IsEmpty(value)
+}
 func IsEmpty(value interface{}) bool {
 	if IsNil(value) {
 		return true

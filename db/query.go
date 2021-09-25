@@ -26,6 +26,16 @@ func (q *Query) Limit(value int) *Query {
 	q.limit = value
 	return q
 }
+func (q *Query) Page(page int, size int) *Query {
+	q.offset = page * size - 1
+	q.limit = size - 1
+	return q
+}
+
+func (q *Query) Offset(value int) *Query {
+	q.offset = value
+	return q
+}
 
 func (q *Query) W(where h.Map) *Query {
 	q.whereMap = &where
