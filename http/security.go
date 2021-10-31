@@ -14,6 +14,7 @@ type Credentials struct {
 
 type Authentication struct {
 	Username  string
+	Audience  string
 	Guest     bool
 	Principal interface{}
 	Claims    map[string]interface{}
@@ -35,7 +36,18 @@ func (f *JwtBearerFilter) Exclude(exclusions ...string) *JwtBearerFilter {
 	return f
 }
 
- */
+*/
+
+func (f *Authentication) Claim(name string) interface{} {
+	if f.Claims == nil {
+		return nil
+	}
+	value, exists := f.Claims[name]
+	if exists {
+		return value
+	}
+	return nil
+}
 
 func (f *JwtBearerFilter) Handle(c *Context) {
 
@@ -56,6 +68,7 @@ func (f *JwtBearerFilter) Handle(c *Context) {
 		c.gin.Set(AuthenticationKey, Authentication{
 			Username:  decoded.Subject,
 			Principal: decoded,
+			Audience:  decoded.Audience,
 			Claims:    decoded.Ext,
 		})
 	}

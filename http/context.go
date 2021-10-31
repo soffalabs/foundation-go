@@ -30,6 +30,11 @@ func (c *Context) SetTenant(value string) *Context {
 	return c
 }
 
+
+func (c *Context) Raw() *gin.Context {
+	return c.gin
+}
+
 func (c *Context) TenantId() string {
 	value, exists := c.gin.Get("tenant")
 	if exists {
@@ -58,13 +63,18 @@ func (c *Context) Auth() Authentication {
 func (c *Context) RequireAuth() *Authentication {
 	value, exists := c.gin.Get(AuthenticationKey)
 	if !exists {
-		c.gin.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-			"message": "Authentication required",
-		})
-		return nil
+		errors.RaiseUnauthorized("Authentication required")
 	}
 	auth := value.(Authentication)
 	return &auth
+}
+
+func (c *Context) RequireAuthWithAudience(audience string) *Authentication {
+	auth := c.RequireAuth()
+	if auth.Audience != audience {
+		errors.RaiseErrForbidden(fmt.Sprintf("invalid audience, %s expected", audience))
+	}
+	return auth
 }
 
 func (c *Context) SetHeaders(headers map[string]string) {
